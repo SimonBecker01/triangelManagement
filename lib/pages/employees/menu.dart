@@ -13,32 +13,61 @@ class MenuScreen extends StatelessWidget {
       appBar: standardAppBar,
       body: Center(
         child: Padding(padding: const EdgeInsets.all(30.0),
-          child : FractionallySizedBox(
-            widthFactor: 0.5,
-            child: GridView.count(
-              crossAxisCount: 4,
-              children: [
-                Spacer(),
-                Spacer(),
-                Spacer(),
-                DropdownMenu<String>(
-                  dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-                    childList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name)))
-                ),
-                Spacer(),
-                ElevatedButton(onPressed: (){
-                    Navigator.of(context).pushReplacementNamed('/timetracker');
-                  },
-                  child: Text('Zeiterfassung')
-                ),
-                ElevatedButton(onPressed: (){
-                    Navigator.of(context).pushReplacementNamed('/documents');
-                  },
-                  child: Text('Klientenakte')
-                ),
-                Spacer()
-              ],
-            )
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children : [
+              Column(
+                children: [
+                  Spacer(),
+                  Spacer(),
+                  Spacer()
+                ]
+              ),
+              Column(
+                children : [
+                  Spacer(),
+                  ElevatedButton(onPressed: (){
+                      Navigator.of(context).pushReplacementNamed('/timetracker');
+                    },
+                    child: Text('Zeiterfassung')
+                  ),
+                  Spacer()
+                ]
+              ),
+              Column(
+                children: [
+                  Spacer(),
+                  SizedBox(
+                    width : 30
+                  ),
+                  Spacer()
+                ]
+              ),
+              Column(
+                children : [
+                  Spacer(),
+                  ElevatedButton(onPressed: (){
+                      Navigator.of(context).pushReplacementNamed('/documents');
+                    },
+                    child: Text('Klientenakte')
+                  ),
+                  Spacer()
+                ]
+              ),
+              Column(
+                children : [
+                  DropdownMenu<String>(
+                    dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
+                      childList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name))),
+                      enabled : childList.length > 1,
+                      initialSelection: childList.first,
+                  ),
+                  Spacer(),
+                  Spacer()
+                ]
+              )
+            ],
           )
         )
       )
