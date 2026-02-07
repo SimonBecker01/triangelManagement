@@ -13,59 +13,72 @@ class MenuScreen extends StatelessWidget {
       appBar: standardAppBar,
       body: Center(
         child: Padding(padding: const EdgeInsets.all(30.0),
-          child: Row(
+          child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             crossAxisAlignment: CrossAxisAlignment.center,
             children : [
-              Column(
-                children: [
-                  Spacer(),
-                  Spacer(),
-                  Spacer()
-                ]
+              Expanded(
+                flex : 1,
+                child : Row(
+                  children : [
+                    Expanded(
+                      flex : 9,
+                      child : Spacer()
+                    ),
+                    Expanded(
+                      flex : 1,
+                      child: DropdownMenu<String>(
+                        dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
+                          childList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name))),
+                          enabled : childList.length > 1,
+                          initialSelection: childList.first,
+                      ),
+                    )
+                  ]
+                ),
               ),
-              Column(
-                children : [
-                  Spacer(),
-                  ElevatedButton(onPressed: (){
-                      Navigator.of(context).pushReplacementNamed('/timetracker');
-                    },
-                    child: Text('Zeiterfassung')
-                  ),
-                  Spacer()
-                ]
+              Expanded(
+                flex: 2,
+                child: Spacer()
               ),
-              Column(
-                children: [
-                  Spacer(),
-                  SizedBox(
-                    width : 30
-                  ),
-                  Spacer()
-                ]
+              Expanded(
+                flex : 3,
+                child : Row(
+                    children : [
+                      Expanded(
+                        flex : 3,
+                        child : Spacer()
+                      ),
+                      Expanded(
+                        flex : 2,
+                        child : ElevatedButton(onPressed: (){
+                            Navigator.of(context).pushReplacementNamed('/timetracker');
+                          },
+                          child: Text('Zeiterfassung')
+                        ),
+                      ),
+                      Expanded(
+                        flex : 1,
+                        child : Spacer()
+                      ),
+                      Expanded(
+                        flex : 2,
+                        child : ElevatedButton(onPressed: (){
+                            Navigator.of(context).pushReplacementNamed('/documents');
+                          },
+                          child: Text('Klientenakte')
+                        ),
+                      ),
+                      Expanded(
+                        flex : 3,
+                        child : Spacer()
+                      ),
+                    ]
+                  )
               ),
-              Column(
-                children : [
-                  Spacer(),
-                  ElevatedButton(onPressed: (){
-                      Navigator.of(context).pushReplacementNamed('/documents');
-                    },
-                    child: Text('Klientenakte')
-                  ),
-                  Spacer()
-                ]
-              ),
-              Column(
-                children : [
-                  DropdownMenu<String>(
-                    dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-                      childList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name))),
-                      enabled : childList.length > 1,
-                      initialSelection: childList.first,
-                  ),
-                  Spacer(),
-                  Spacer()
-                ]
+              Expanded(
+                flex: 4,
+                child: Spacer()
               )
             ],
           )
