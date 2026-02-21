@@ -215,7 +215,12 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
                                             );
                                             if(selectedTime != null && selectedTime.toString().length > 1){
                                               setState(() {
-                                                endTime = selectedTime;
+                                                if(selectedTime.compareTo(startTime) > 0){
+                                                  endTime = selectedTime;
+                                                }
+                                                else{
+                                                  endTime = startTime.plusMinutes(5);
+                                                }
                                               });
                                             }
                                           },
