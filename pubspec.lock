@@ -75,6 +75,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  interval_time_picker:
+    dependency: "direct main"
+    description:
+      name: interval_time_picker
+      sha256: b7c28d89b3cf21f4059288bbd42b6079e04d1462affa9ad54cff1d1eedf9583d
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.0.0+12"
   leak_tracker:
     dependency: transitive
     description:
@@ -210,4 +218,4 @@ packages:
     version: "15.0.2"
 sdks:
   dart: ">=3.10.1 <4.0.0"
-  flutter: ">=3.18.0-18.0.pre.54"
+  flutter: ">=3.35.0"

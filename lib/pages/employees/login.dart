@@ -48,7 +48,7 @@ class LoginScreen extends StatelessWidget {
                 ),
                 Expanded(
                   flex : 2,
-                  child : ElevatedButton(onPressed: (){
+                  child : FilledButton(onPressed: (){
                       //Pseudologin
                       _responseController.text = '';
                       if(_nameController.text == 'Mitarbeiter' && _passController.text == 'Mitarbeiter1'){

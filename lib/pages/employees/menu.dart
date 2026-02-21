@@ -22,7 +22,7 @@ class MenuScreen extends StatelessWidget {
                     flex : 9
                   ),
                   Expanded(
-                    flex : 1,
+                    flex : 2,
                     child: dropDownChildren,
                   )
                 ]
@@ -40,7 +40,7 @@ class MenuScreen extends StatelessWidget {
                     ),
                     Expanded(
                       flex : 2,
-                      child : ElevatedButton(onPressed: (){
+                      child : FilledButton(onPressed: (){
                           Navigator.of(context).pushReplacementNamed('/timetracker');
                         },
                         child: Text('Zeiterfassung')
@@ -51,7 +51,7 @@ class MenuScreen extends StatelessWidget {
                     ),
                     Expanded(
                       flex : 2,
-                      child : ElevatedButton(onPressed: (){
+                      child : FilledButton(onPressed: (){
                           Navigator.of(context).pushReplacementNamed('/documents');
                         },
                         child: Text('Klientenakte')

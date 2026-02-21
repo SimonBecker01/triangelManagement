@@ -3,6 +3,7 @@ import 'package:management_triangel/global.dart';
 import 'package:management_triangel/pages/employees/documents.dart';
 import 'package:management_triangel/pages/employees/login.dart';
 import 'package:management_triangel/pages/employees/menu.dart';
+import 'package:management_triangel/pages/employees/newdocument.dart';
 import 'package:management_triangel/pages/employees/timetracker.dart';
 
 
@@ -26,8 +27,9 @@ class TriangelManagementMain extends StatelessWidget {
       routes: <String, WidgetBuilder>{
         '/login': (BuildContext context) => LoginScreen(),
         '/menu': (BuildContext context) => const MenuScreen(),
-        '/timetracker': (BuildContext context) => const TimetrackerScreen(),
-        '/documents': (BuildContext context) => const DocumentsScreen()
+        '/timetracker': (BuildContext context) => TimetrackerScreen(),
+        '/documents': (BuildContext context) => const DocumentsScreen(),
+        '/newdocument': (BuildContext context) => const NewDocumentScreen(),
       }
     );
   }
