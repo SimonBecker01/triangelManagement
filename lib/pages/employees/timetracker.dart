@@ -1,5 +1,4 @@
-import 'dart:collection';
-
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:interval_time_picker/models/visible_step.dart';
 import 'package:management_triangel/global.dart';
@@ -34,12 +33,46 @@ class TimetrackerScreen extends StatefulWidget {
 class _TimeTrackerState extends State<TimetrackerScreen>{
 
 
+  @override
+  void initState() {
+    super.initState();
+
+    dropDownChildren = DropdownMenu<String>(
+      dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
+          childList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name))),
+        enabled : childList.length > 1,
+        initialSelection: childList.first,
+        onSelected: (value) {
+          if(value != null){
+            selectedChild = childList.indexOf(value);
+          }
+        },
+    );
+
+    dropDownActivity = DropdownMenu<String>(
+      dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
+        activityList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name))),
+        enabled : activityList.length > 1,
+        initialSelection: activityList.first,
+        onSelected: (value) {
+          if(value != null){
+            selectedActivity = activityList.indexOf(value);
+          }
+        },
+    );
+
+  }
+  
+  DropdownMenu<String> dropDownChildren = DropdownMenu<String>(dropdownMenuEntries: [],);
+  DropdownMenu<String> dropDownActivity = DropdownMenu<String>(dropdownMenuEntries: [],);
+
   final _startTimeController = TextEditingController();
   final _endTimeController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   TimeOfDay startTime = TimeOfDay(hour:TimeOfDay.now().hour, minute: TimeOfDay.now().minute - (TimeOfDay.now().minute % 5));
   TimeOfDay endTime = TimeOfDay(hour:TimeOfDay.now().plusMinutes(30).hour, minute: TimeOfDay.now().plusMinutes(30).minute - (TimeOfDay.now().minute % 5));
+
 
 
   void _changedDate(DateTime value){
@@ -239,22 +272,19 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
                               Expanded(
                                 flex : 1,
                                 child: Padding(padding: EdgeInsetsGeometry.all(16),
-                                  child : Container(
-                                    decoration: BoxDecoration(color : Colors.white),
-                                    child: ListView.builder(
-                                      itemCount: activityOnDayList.length,
-                                      itemBuilder: (context, index) {
-                                        return ListTile(
-                                          title : Text(activityOnDayList[index].$1.format(context) + "-" + activityOnDayList[index].$2.format(context) + " - " + activityList[activityOnDayList[index].$3]),
-                                          tileColor: selectedIndex == index ? Colors.blue : null,
-                                          onTap: () {
-                                              selectedIndex = index;
-                                              _changedactivity(index);
-                                          }
-                                        );
-                                      }
-                                    ),
-                                  )
+                                  child: ListView.builder(
+                                    itemCount: activityOnDayList.length,
+                                    itemBuilder: (context, index) {
+                                      return ListTile(
+                                        title : Text(activityOnDayList[index].$1.format(context) + "-" + activityOnDayList[index].$2.format(context) + " - " + activityList[activityOnDayList[index].$3]),
+                                        tileColor: selectedIndex == index ? Colors.blue :  Colors.white,
+                                        onTap: () {
+                                            selectedIndex = index;
+                                            _changedactivity(index);
+                                        }
+                                      );
+                                    }
+                                  ),
                                 )
                               )
                             ],

@@ -27,7 +27,7 @@ class TriangelManagementMain extends StatelessWidget {
       routes: <String, WidgetBuilder>{
         '/login': (BuildContext context) => LoginScreen(),
         '/menu': (BuildContext context) => const MenuScreen(),
-        '/timetracker': (BuildContext context) => TimetrackerScreen(),
+        '/timetracker': (BuildContext context) => const TimetrackerScreen(),
         '/documents': (BuildContext context) => const DocumentsScreen(),
         '/newdocument': (BuildContext context) => const NewDocumentScreen(),
       }

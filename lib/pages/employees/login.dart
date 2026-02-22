@@ -1,4 +1,4 @@
-import 'package:collection/collection.dart';
+
 import 'package:flutter/material.dart';
 import 'package:management_triangel/global.dart';
 
@@ -55,6 +55,9 @@ class LoginScreen extends StatelessWidget {
                         userLoggedIn = 1;
                         childList = ['Kind1'];
                         activityList = ['Dokumentation', 'Betreuung'];
+                        documentGroupList = <String>['Medizinisches', 'Rechtliches', 'Betreuung'];
+                        documentCategoryList = <String>['Nachweise', 'Bilder'];
+                        documentList = <(int, String, int, int)>[(0, 'Medikamentengabe', 0, 0), (0, 'Verfügung', 1, 0), (0, 'Schulbesuch', 2, 0),(0, 'Arztbericht', 0, 1)];
                         Navigator.of(context).pushReplacementNamed('/menu');
                       }
                       else{
@@ -62,18 +65,16 @@ class LoginScreen extends StatelessWidget {
                           userLoggedIn = 2;
                           childList = ['Kind1', 'Kind2'];
                           activityList = ['Dokumentation', 'Beratung', 'Verwaltung'];
+                          documentGroupList = <String>['Medizinisches', 'Rechtliches', 'Betreuung', 'Finanzen'];
+                          documentCategoryList = <String>['Nachweise', 'Bilder', 'Verträge'];
+                          documentList = <(int, String, int, int)>[(0, 'Medikamentengabe', 0, 0), (0, 'Verfügung', 1, 0), (0, 'Schulbesuch', 2, 0),(0, 'Arztbericht', 0, 1),(0, 'Betreuungsvertrag', 0, 2),
+                            (1, 'Medikamentengabe', 0, 1), (1, 'Arztrechnung', 1, 2), (1, 'Schulbesuch', 2, 0),(1, 'Arztbericht', 0, 1),(1, 'Betreuungsvertrag', 0, 2)];
                           Navigator.of(context).pushReplacementNamed('/menu');
                         }
                         else{
                           _responseController.text = 'Benutzername und Passwort sind nicht korrekt!';
                         }
                       }
-                      dropDownChildren = DropdownMenu<String>(
-                            dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-                              childList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name))),
-                              enabled : childList.length > 1,
-                              initialSelection: childList.first,
-                          );
                     },
                     child: Text('Login')
                   )

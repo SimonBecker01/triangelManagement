@@ -21,10 +21,6 @@ class MenuScreen extends StatelessWidget {
                   Spacer(
                     flex : 9
                   ),
-                  Expanded(
-                    flex : 2,
-                    child: dropDownChildren,
-                  )
                 ]
               ),
             ),
