@@ -3,7 +3,14 @@ import 'package:flutter/material.dart';
 const Color darkBG = Color.fromRGBO(88, 140, 52, 1);
 const Color lightBG = Color.fromRGBO(122, 201, 67, 1);
 
-AppBar standardAppBar = AppBar(title: Image.asset('Assets/Logo.png'), backgroundColor: darkBG,);
+AppBar standardAppBar = AppBar(
+  title: Image.asset('Assets/Logo.png'),
+  backgroundColor: darkBG,
+  iconTheme: IconThemeData(
+    color: Colors.black, //change your color here
+  ),
+  centerTitle: true,
+);
 
 int userLoggedIn = 0;
 int selectedChild = 0;

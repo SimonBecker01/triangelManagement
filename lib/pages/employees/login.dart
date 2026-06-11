@@ -12,6 +12,27 @@ class LoginScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    standardAppBar = AppBar(
+      title: Image.asset('Assets/Logo.png'),
+      backgroundColor: darkBG,
+      iconTheme: IconThemeData(
+        color: Colors.black, //change your color here
+      ),
+      centerTitle: true,
+      actions: [
+        InkWell(
+          onTap: () {
+            Navigator.of(context).pushNamedAndRemoveUntil('/login', (Route<dynamic> route) => false);
+          },
+          child: Icon(
+            Icons.logout,
+            color: Colors.black54,
+          ),
+        ),
+      ]
+    );
+
     return Scaffold(
       appBar: standardAppBar,
       body: Center(
@@ -58,7 +79,9 @@ class LoginScreen extends StatelessWidget {
                         documentGroupList = <String>['Medizinisches', 'Rechtliches', 'Betreuung'];
                         documentCategoryList = <String>['Nachweise', 'Bilder'];
                         documentList = <(int, String, int, int)>[(0, 'Medikamentengabe', 0, 0), (0, 'Verfügung', 1, 0), (0, 'Schulbesuch', 2, 0),(0, 'Arztbericht', 0, 1)];
-                        Navigator.of(context).pushReplacementNamed('/menu');
+                        Navigator.of(context).pushNamed('/menu');
+                        _nameController.text = '';
+                        _responseController.text = '';
                       }
                       else{
                         if(_nameController.text == 'Koordinator' && _passController.text == 'Koordinator1'){
@@ -69,12 +92,15 @@ class LoginScreen extends StatelessWidget {
                           documentCategoryList = <String>['Nachweise', 'Bilder', 'Verträge'];
                           documentList = <(int, String, int, int)>[(0, 'Medikamentengabe', 0, 0), (0, 'Verfügung', 1, 0), (0, 'Schulbesuch', 2, 0),(0, 'Arztbericht', 0, 1),(0, 'Betreuungsvertrag', 0, 2),
                             (1, 'Medikamentengabe', 0, 1), (1, 'Arztrechnung', 1, 2), (1, 'Schulbesuch', 2, 0),(1, 'Arztbericht', 0, 1),(1, 'Betreuungsvertrag', 0, 2)];
-                          Navigator.of(context).pushReplacementNamed('/menu');
+                          Navigator.of(context).pushNamed('/menu');
+                          _nameController.text = '';
+                          _responseController.text = '';
                         }
                         else{
                           _responseController.text = 'Benutzername und Passwort sind nicht korrekt!';
                         }
                       }
+                        _passController.text = '';
                     },
                     child: Text('Login')
                   )

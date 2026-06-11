@@ -37,7 +37,7 @@ class MenuScreen extends StatelessWidget {
                     Expanded(
                       flex : 2,
                       child : FilledButton(onPressed: (){
-                          Navigator.of(context).pushReplacementNamed('/timetracker');
+                          Navigator.of(context).pushNamed('/timetracker');
                         },
                         child: Text('Zeiterfassung')
                       ),
@@ -48,7 +48,7 @@ class MenuScreen extends StatelessWidget {
                     Expanded(
                       flex : 2,
                       child : FilledButton(onPressed: (){
-                          Navigator.of(context).pushReplacementNamed('/documents');
+                          Navigator.of(context).pushNamed('/documents');
                         },
                         child: Text('Klientenakte')
                       ),

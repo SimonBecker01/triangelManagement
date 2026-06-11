@@ -204,7 +204,7 @@ class _DocumentsState extends State<DocumentsScreen>{
                     flex: 3,
                     child: FilledButton(
                       onPressed: () {
-                        Navigator.of(context).pushReplacementNamed('/newdocument');
+                        Navigator.of(context).pushNamed('/newdocument');
                       },
                       child: Text('Neu')),
                   ),
