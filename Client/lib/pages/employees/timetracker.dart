@@ -1,8 +1,11 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:grpc/grpc.dart';
 import 'package:interval_time_picker/models/visible_step.dart';
 import 'package:management_triangel/global.dart';
 import 'package:interval_time_picker/interval_time_picker.dart';
+import 'package:management_triangel/src/generated/triangel.pb.dart';
+import 'package:fixnum/fixnum.dart' as fn;
 
 extension TimeOfDayExtension on TimeOfDay {
   // Ported from org.threeten.bp;
@@ -44,7 +47,7 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
         initialSelection: childList.first,
         onSelected: (value) {
           if(value != null){
-            selectedChild = childList.indexOf(value);
+            selectedChild = childListId.elementAt(childList.indexOf(value));
           }
         },
     );
@@ -56,7 +59,7 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
         initialSelection: activityList.first,
         onSelected: (value) {
           if(value != null){
-            selectedActivity = activityList.indexOf(value);
+            selectedActivity = activityListId.elementAt(activityList.indexOf(value));
           }
         },
     );
@@ -73,22 +76,23 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
   TimeOfDay startTime = TimeOfDay(hour:TimeOfDay.now().hour, minute: TimeOfDay.now().minute - (TimeOfDay.now().minute % 5));
   TimeOfDay endTime = TimeOfDay(hour:TimeOfDay.now().plusMinutes(30).hour, minute: TimeOfDay.now().plusMinutes(30).minute - (TimeOfDay.now().minute % 5));
 
+  DateTime currSelDate = DateTime.now();
+  int currSelActivity = 0;
 
 
-  void _changedDate(DateTime value){
-    setState(() {
-      switch (value.day % 3) {
-        case 0:
-          activityOnDayList = [];
-          break;
-        case 1:
-          activityOnDayList = [(TimeOfDay(hour: 10, minute: 0), TimeOfDay(hour: 11, minute: 0), 0, 0, 'Was getan')];
-          break;
-        case 2:
-          activityOnDayList = [(TimeOfDay(hour: 10, minute: 0), TimeOfDay(hour: 11, minute: 0), 0, 0, 'Was getan'),(TimeOfDay(hour: 11, minute: 0), TimeOfDay(hour: 12, minute: 30), 1, 0, 'Noch was getan')];
-          break;
-        default:
-      }
+
+  void _changedDate() async{
+    final zeiteintraegeResult = await globalGrpcClient.getZeiteintraege(Datum(year: currSelDate.year, month: currSelDate.month, day: currSelDate.day));
+
+    activityOnDayList.clear();
+
+    for (int i = 0; i < zeiteintraegeResult.zeiteintraege.length; i++){
+      TimeOfDay vonToD = TimeOfDay(hour: zeiteintraegeResult.zeiteintraege.elementAt(i).anfang.hour, minute: zeiteintraegeResult.zeiteintraege.elementAt(i).anfang.minute);
+      TimeOfDay bisToD = TimeOfDay(hour: zeiteintraegeResult.zeiteintraege.elementAt(i).ende.hour, minute: zeiteintraegeResult.zeiteintraege.elementAt(i).ende.minute);
+      activityOnDayList.add((vonToD, bisToD, zeiteintraegeResult.zeiteintraege.elementAt(i).taetigkeitid.toInt(), zeiteintraegeResult.zeiteintraege.elementAt(i).klientid.toInt(), zeiteintraegeResult.zeiteintraege.elementAt(i).beschreibung, zeiteintraegeResult.zeiteintraege.elementAt(i).eintragid.toInt()));
+    }
+    setState((){
+
     });
   }
 
@@ -99,6 +103,7 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
     selectedActivity = activityOnDayList[changedIndex].$3;
     selectedChild = activityOnDayList[changedIndex].$4;
     _descriptionController.text = activityOnDayList[changedIndex].$5;
+    currSelActivity = activityOnDayList[changedIndex].$6;
 
 
     setState(() {
@@ -107,10 +112,10 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
         dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
           activityList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name))),
           enabled : activityList.length > 1,
-          initialSelection: activityList[activityOnDayList[changedIndex].$3],
+          initialSelection: activityList.elementAt(activityListId.indexOf(activityOnDayList[changedIndex].$3)),
           onSelected: (value) {
             if(value != null){
-              selectedActivity = activityList.indexOf(value);
+              selectedActivity = activityListId.elementAt(activityList.indexOf(value));
             }
           },
       );
@@ -119,10 +124,10 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
         dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
             childList.map<DropdownMenuEntry<String>>((String name) => DropdownMenuEntry<String>(value: name, label: name, enabled: false))),
           enabled : childList.length > 1,
-          initialSelection: childList[activityOnDayList[changedIndex].$4],
+          initialSelection: childList.elementAt(childListId.indexOf(activityOnDayList[changedIndex].$4)),
           onSelected: (value) {
             if(value != null){
-              selectedChild = childList.indexOf(value);
+              selectedChild = childListId.elementAt(childList.indexOf(value));
             }
           },
       );
@@ -134,7 +139,6 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
     _startTimeController.text = startTime.format(context);
     _endTimeController.text = endTime.format(context);
 
-    
 
     int selectedIndex = 0;
 
@@ -200,11 +204,12 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
                         Expanded(
                           flex : 2,
                           child : CalendarDatePicker(
-                            initialDate: DateTime.now(),
+                            initialDate: currSelDate,
                             firstDate: DateTime(2025),
                             lastDate: DateTime(3000),
                             onDateChanged: (DateTime value) { 
-                              _changedDate(value);
+                              currSelDate = value;
+                              _changedDate();
                             },
                           ),
                         ),
@@ -227,7 +232,9 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
                                               )
                                             );
                                             if(selectedTime != null && selectedTime.toString().length > 1){
-                                              startTime = selectedTime;
+                                              setState(() {
+                                                startTime = selectedTime;
+                                              });
                                             }
                                           },
                                           child: TextField(controller: _startTimeController, enabled: false, textAlign: TextAlign.center, textAlignVertical: TextAlignVertical.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold,),)
@@ -276,7 +283,7 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
                                     itemCount: activityOnDayList.length,
                                     itemBuilder: (context, index) {
                                       return ListTile(
-                                        title : Text(activityOnDayList[index].$1.format(context) + "-" + activityOnDayList[index].$2.format(context) + " - " + activityList[activityOnDayList[index].$3]),
+                                        title : Text("${activityOnDayList[index].$1.format(context)}-${activityOnDayList[index].$2.format(context)} - ${activityList.elementAt(activityListId.indexOf(activityOnDayList[index].$3))}"),
                                         tileColor: selectedIndex == index ? Colors.blue :  Colors.white,
                                         onTap: () {
                                             selectedIndex = index;
@@ -301,33 +308,150 @@ class _TimeTrackerState extends State<TimetrackerScreen>{
               child: Row(
                 children: [
                   Spacer(
-                    flex: 8
+                    flex: 7
                   ),
                   Expanded(
                     flex: 1,
                     child: FilledButton(
-                      onPressed: () {
-                        if(activityOnDayList.length >= selectedIndex){
-                          setState(
-                            (){
-                                activityOnDayList.removeAt(selectedIndex);
-                              }
-                          );
+                      onPressed: () async{
+                        try{
+                          await globalGrpcClient.saveZeiteintrag(Zeiteintrag(dayofentry: Datum(year: currSelDate.year, month: currSelDate.month, day: currSelDate.day)
+                            , anfang: Uhrzeit(hour: startTime.hour, minute: startTime.minute)
+                            , ende: Uhrzeit(hour: endTime.hour, minute: endTime.minute)
+                            , taetigkeitid: fn.Int64(selectedActivity)
+                            , klientid: fn.Int64(selectedChild)
+                            , beschreibung: _descriptionController.text
+                            , eintragid: fn.Int64(currSelActivity)), 2);
+                        }catch(error){
+                          GrpcError grpce = error as GrpcError;
+                          if (grpce.code == 6 && context.mounted){
+                            showDialog(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('Überschneidung'),
+                                content: const Text('Überschneidung mit bestehendem Eintrag!'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(dialogContext).pop(),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }else{
+                            if (context.mounted){
+                              showDialog(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  title: const Text('Serverfehler'),
+                                  content: const Text('Fehler auf Serverseite.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(dialogContext).pop(),
+                                      child: const Text('OK'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                          }
                         }
+                        setState(
+                          () {
+                            _changedDate();
+                          }
+                        );
+                      },
+                      child: Text('Ändern')),
+                  ),
+                  Expanded(
+                    flex: 1,
+                    child: FilledButton(
+                      onPressed: () async{
+                        try{
+                          await globalGrpcClient.saveZeiteintrag(Zeiteintrag(dayofentry: Datum(year: currSelDate.year, month: currSelDate.month, day: currSelDate.day)
+                            , anfang: Uhrzeit(hour: startTime.hour, minute: startTime.minute)
+                            , ende: Uhrzeit(hour: endTime.hour, minute: endTime.minute)
+                            , taetigkeitid: fn.Int64(selectedActivity)
+                            , klientid: fn.Int64(selectedChild)
+                            , eintragid: fn.Int64(currSelActivity)), 3);
+                        }catch(error){
+                          if (context.mounted){
+                            showDialog(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('Serverfehler'),
+                                content: const Text('Fehler auf Serverseite.'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(dialogContext).pop(),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+                        }
+                        setState(
+                          () {
+                            _changedDate();
+                          }
+                        );
                       },
                       child: Text('Löschen')),
                   ),
                   Expanded(
                     flex: 1,
                     child: FilledButton(
-                      onPressed: () {
+                      onPressed: () async{
+                        try{
+                          await globalGrpcClient.saveZeiteintrag(Zeiteintrag(dayofentry: Datum(year: currSelDate.year, month: currSelDate.month, day: currSelDate.day)
+                            , anfang: Uhrzeit(hour: startTime.hour, minute: startTime.minute)
+                            , ende: Uhrzeit(hour: endTime.hour, minute: endTime.minute)
+                            , taetigkeitid: fn.Int64(selectedActivity)
+                            , klientid: fn.Int64(selectedChild)
+                            , beschreibung: _descriptionController.text), 1);
+                        }catch(error){
+                          GrpcError grpce = error as GrpcError;
+                          if (grpce.code == 6 && context.mounted){
+                            showDialog(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: const Text('Überschneidung'),
+                                content: const Text('Überschneidung mit bestehendem Eintrag!'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(dialogContext).pop(),
+                                    child: const Text('OK'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }else{
+                            if (context.mounted){
+                              showDialog(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  title: const Text('Serverfehler'),
+                                  content: const Text('Fehler auf Serverseite.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(dialogContext).pop(),
+                                      child: const Text('OK'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                          }
+                        }
                         setState(
-                          (){
-                            activityOnDayList.add((startTime, endTime, selectedActivity, selectedChild, _descriptionController.text));
+                          () {
+                            _changedDate();
                           }
                         );
                       },
-                      child: Text('Speichern')),
+                      child: Text('Neu Anlegen')),
                   )
                 ]
               ),

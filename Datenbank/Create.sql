@@ -6,7 +6,8 @@ CREATE TABLE `Users`(
     `email` VARCHAR(255) NOT NULL,
     `salt` CHAR(60) NOT NULL,
     `hash` CHAR(128) NOT NULL,
-    `role` SMALLINT UNSIGNED NOT NULL
+    `role` SMALLINT UNSIGNED NOT NULL,
+    `forceResetPass` SMALLINT UNSIGNED NOT NULL DEFAULT 1
 );
 ALTER TABLE
     `Users` ADD UNIQUE `users_last_name_first_name_email_unique`(`last_name`, `first_name`, `email`);
@@ -21,12 +22,12 @@ ALTER TABLE
     `Klienten` ADD UNIQUE `klienten_last_name_first_name_unique`(`last_name`, `first_name`);
 CREATE TABLE `Betreuungen`(
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `Betreuuer` BIGINT UNSIGNED NOT NULL,
+    `Betreuer` BIGINT UNSIGNED NOT NULL,
     `Klient` BIGINT UNSIGNED NOT NULL,
     `Vereinbarung` BIGINT UNSIGNED NOT NULL
 );
 ALTER TABLE
-    `Betreuungen` ADD UNIQUE `betreuungen_betreuuer_klient_unique`(`Betreuuer`, `Klient`);
+    `Betreuungen` ADD UNIQUE `betreuungen_Betreuer_klient_unique`(`Betreuer`, `Klient`);
 CREATE TABLE `Rollen`(
     `id` SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `Rolle` VARCHAR(255) NOT NULL
@@ -105,12 +106,18 @@ CREATE TABLE `Zeiterfassung`(
     `Betreuung` BIGINT UNSIGNED NOT NULL,
     `Taetigkeit` BIGINT UNSIGNED NOT NULL,
     `von` DATETIME NOT NULL,
-    `bis` DATETIME NOT NULL
+    `bis` DATETIME NOT NULL,
+	`Beschreibung` VARCHAR DEFAULT ""
 );
 CREATE TABLE `Taetigkeit`(
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `Name` VARCHAR(255) NOT NULL,
     `Abrechenbar` BOOLEAN NOT NULL
+);
+CREATE TABLE `Misc`(
+    `name` VARCHAR(255) NOT NULL,
+    `value` VARCHAR(255) NOT NULL,
+    PRIMARY KEY(`name`)
 );
 ALTER TABLE
     `RechteGruppe` ADD CONSTRAINT `rechtegruppe_gruppe_foreign` FOREIGN KEY(`Gruppe`) REFERENCES `Gruppe`(`id`);
@@ -147,4 +154,4 @@ ALTER TABLE
 ALTER TABLE
     `VariablenWerte` ADD CONSTRAINT `variablenwerte_variable_foreign` FOREIGN KEY(`Variable`) REFERENCES `Variablen`(`id`);
 ALTER TABLE
-    `Betreuungen` ADD CONSTRAINT `betreuungen_betreuuer_foreign` FOREIGN KEY(`Betreuuer`) REFERENCES `Users`(`id`);
+    `Betreuungen` ADD CONSTRAINT `betreuungen_Betreuer_foreign` FOREIGN KEY(`Betreuer`) REFERENCES `Users`(`id`);

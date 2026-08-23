@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:grpc/grpc.dart';
 import 'package:management_triangel/global.dart';
 
 class LoginScreen extends StatelessWidget {
@@ -69,38 +70,75 @@ class LoginScreen extends StatelessWidget {
                 ),
                 Expanded(
                   flex : 2,
-                  child : FilledButton(onPressed: (){
-                      //Pseudologin
-                      _responseController.text = '';
-                      if(_nameController.text == 'Mitarbeiter' && _passController.text == 'Mitarbeiter1'){
-                        userLoggedIn = 1;
-                        childList = ['Kind1'];
-                        activityList = ['Dokumentation', 'Betreuung'];
-                        documentGroupList = <String>['Medizinisches', 'Rechtliches', 'Betreuung'];
-                        documentCategoryList = <String>['Nachweise', 'Bilder'];
-                        documentList = <(int, String, int, int)>[(0, 'Medikamentengabe', 0, 0), (0, 'Verfügung', 1, 0), (0, 'Schulbesuch', 2, 0),(0, 'Arztbericht', 0, 1)];
-                        Navigator.of(context).pushNamed('/menu');
-                        _nameController.text = '';
-                        _responseController.text = '';
-                      }
-                      else{
-                        if(_nameController.text == 'Koordinator' && _passController.text == 'Koordinator1'){
-                          userLoggedIn = 2;
-                          childList = ['Kind1', 'Kind2'];
-                          activityList = ['Dokumentation', 'Beratung', 'Verwaltung'];
-                          documentGroupList = <String>['Medizinisches', 'Rechtliches', 'Betreuung', 'Finanzen'];
-                          documentCategoryList = <String>['Nachweise', 'Bilder', 'Verträge'];
-                          documentList = <(int, String, int, int)>[(0, 'Medikamentengabe', 0, 0), (0, 'Verfügung', 1, 0), (0, 'Schulbesuch', 2, 0),(0, 'Arztbericht', 0, 1),(0, 'Betreuungsvertrag', 0, 2),
-                            (1, 'Medikamentengabe', 0, 1), (1, 'Arztrechnung', 1, 2), (1, 'Schulbesuch', 2, 0),(1, 'Arztbericht', 0, 1),(1, 'Betreuungsvertrag', 0, 2)];
-                          Navigator.of(context).pushNamed('/menu');
-                          _nameController.text = '';
-                          _responseController.text = '';
+                  child : FilledButton(onPressed: () async{
+                      try{
+                        final loginResult = await globalGrpcClient.login(_nameController.text, _passController.text);
+
+                        if (loginResult.errorCode.isEmpty){
+
+                          globalGrpcClient.setAuthToken(loginResult.accessToken);
+
+                          darkBG = Color.fromRGBO(loginResult.darkbg.r, loginResult.darkbg.g, loginResult.darkbg.b, 1);
+                          lightBG = Color.fromRGBO(loginResult.lightbg.r, loginResult.lightbg.g, loginResult.lightbg.b, 1);
+                          
+                          
+                          childList.clear();
+                          childListId.clear();
+
+                          for (int i = 0; i < loginResult.klienten.length; i++){
+                            childList.add(loginResult.klienten.elementAt(i).fname + loginResult.klienten.elementAt(i).nname);
+                            childListId.add(loginResult.klienten.elementAt(i).id.toInt());
+                          }
+
+                          if(childList.isNotEmpty){
+                            selectedChild = childListId.first;
+                          }
+
+                          final docConfigResult = await globalGrpcClient.getDocumentConfig();
+                          
+                          documentGroupList.clear();
+                          documentGroupListId.clear();
+
+                          for (int i = 0; i < docConfigResult.gruppen.length; i++){
+                            documentGroupList.add(docConfigResult.gruppen.elementAt(i).bezeichnung);
+                            documentGroupListId.add(docConfigResult.gruppen.elementAt(i).id.toInt());
+                          }
+
+                          documentCategoryList.clear();
+                          documentCategoryListId.clear();
+
+                          for (int i = 0; i < docConfigResult.kategorien.length; i++){
+                            documentCategoryList.add(docConfigResult.kategorien.elementAt(i).bezeichnung);
+                            documentCategoryListId.add(docConfigResult.kategorien.elementAt(i).id.toInt());
+                          }
+
+                          final taetigkeitenResult = await globalGrpcClient.getTaetigkeiten();
+
+                          activityList.clear();
+                          activityListId.clear();
+
+                          for (int i = 0; i < taetigkeitenResult.taetigkeiten.length; i++){
+                            activityList.add(taetigkeitenResult.taetigkeiten.elementAt(i).bezeichnung);
+                            activityListId.add(taetigkeitenResult.taetigkeiten.elementAt(i).id.toInt());
+                          }
+                          
+                          if(activityList.isNotEmpty){
+                            selectedActivity = activityListId.first;
+                          }
+
+                          if(context.mounted){
+                            Navigator.of(context).pushNamed('/menu');
+                          }
+                        }else{
+                          _responseController.text = loginResult.errorCode;
                         }
-                        else{
-                          _responseController.text = 'Benutzername und Passwort sind nicht korrekt!';
+                      }catch (error) {
+                        if (error is GrpcError &&
+                            error.code == StatusCode.permissionDenied) {
+                          _responseController.text = error.codeName;
                         }
+                      _passController.text = '';
                       }
-                        _passController.text = '';
                     },
                     child: Text('Login')
                   )

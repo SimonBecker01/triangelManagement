@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grpc/grpc.dart';
 import 'package:management_triangel/global.dart';
 import 'package:management_triangel/pages/employees/documents.dart';
 import 'package:management_triangel/pages/employees/login.dart';
@@ -7,7 +8,12 @@ import 'package:management_triangel/pages/employees/newdocument.dart';
 import 'package:management_triangel/pages/employees/timetracker.dart';
 
 
-void main() {
+Future<void> main() async {
+    try{
+      await globalGrpcClient.connect(host: 'allebescheuert.de', port: 50051);
+    } on GrpcError catch (e) {
+      print('gRPC error: ${e.codeName} (${e.message})');
+    }
   runApp(const TriangelManagementMain());
 }
 
@@ -15,8 +21,6 @@ void main() {
 class TriangelManagementMain extends StatelessWidget {
   const TriangelManagementMain({super.key});
 
-
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

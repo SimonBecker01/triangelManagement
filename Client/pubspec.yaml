@@ -37,6 +37,8 @@ dependencies:
   collection: ^1.19.1
   interval_time_picker: ^4.0.0+12
   file_picker: ^10.3.10
+  grpc: ^5.1.0
+  protobuf: ^6.0.0
 
 dev_dependencies:
   flutter_test:
