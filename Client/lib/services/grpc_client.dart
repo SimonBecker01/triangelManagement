@@ -15,6 +15,7 @@ class GrpcClient {
   DocumentConfigServiceClient? _documentConfig;
   DocumentsServiceClient? _documents;
   DocumentServiceClient? _document;
+  DeleteDocumentServiceClient? _deleteDocument;
   SendDocumentServiceClient? _sendDocument;
   TaetigkeitServiceClient? _taetigkeit;
   ZeiteintraegeServiceClient? _zeiteintraege;
@@ -41,6 +42,7 @@ class GrpcClient {
     _documentConfig = DocumentConfigServiceClient(channel);
     _documents = DocumentsServiceClient(channel);
     _document = DocumentServiceClient(channel);
+    _deleteDocument = DeleteDocumentServiceClient(channel);
     _sendDocument = SendDocumentServiceClient(channel);
     _taetigkeit = TaetigkeitServiceClient(channel);
     _zeiteintraege = ZeiteintraegeServiceClient(channel);
@@ -56,6 +58,7 @@ class GrpcClient {
     _documentConfig = null;
     _documents = null;
     _document = null;
+    _deleteDocument = null;
     _sendDocument = null;
     _taetigkeit = null;
     _zeiteintraege = null;
@@ -98,6 +101,11 @@ class GrpcClient {
   Future<DocumentReply> getDocument(Dokument dokument) =>
       _use(_document, 'getDocument')
           .getDocument(DocumentRequest()..dokument = dokument,
+              options: _opts());
+
+  Future<DeleteDocumentReply> deleteDocument(Dokument dokument) =>
+      _use(_deleteDocument, 'deleteDocument')
+          .deleteDocument(DeleteDocumentRequest()..dokument = dokument,
               options: _opts());
 
   Future<SendDocumentReply> sendDocument(Dokument dokument, List<int> file) =>

@@ -3,6 +3,7 @@
 #include <openssl/evp.h>
 #include <sstream>
 #include <iomanip>
+#include <openssl/rand.h>
 
 
 DatabaseOperator::DatabaseOperator(DatabaseManager& dbm) : m_manager(&dbm){
@@ -15,15 +16,9 @@ int DatabaseOperator::createUser(const db::raw::User& user, const std::string& p
 {
     db::raw::User t_user;
 
-    if(selectUser(user.login, user.id, t_user) != 0){
+    if(selectUser(user.login, user.id, t_user) == 2){
  
-        std::string salt = "";
-        salt.reserve(40);
-
-        for(int i = 0;i < 40;i++){
-            salt.push_back(std::rand() % 94 + 32);
-        }
-
+        std::string salt = random_string(std::size_t(20));
         
         std::string hash = makeHash(pass, salt);
         
@@ -55,7 +50,7 @@ int DatabaseOperator::createUser(const db::raw::User& user, const std::string& p
     return 1;
 }
 
-int DatabaseOperator::checkUser(const std::string& login, const std::string& pass, int64_t& id, int32_t& forceReset)
+int DatabaseOperator::checkUser(const std::string& login, const std::string& pass, int64_t& id, int32_t& forceReset, int32_t& role)
 {
     db::raw::User user;
 
@@ -66,6 +61,7 @@ int DatabaseOperator::checkUser(const std::string& login, const std::string& pas
         if(makeHash(pass, user.salt) == user.hash){
             id = user.id;
             forceReset = user.forceReset;
+            role = user.role;
             return 0;
         }
         return 2;
@@ -152,7 +148,7 @@ int DatabaseOperator::getGruppen(const int64_t id, std::vector<db::raw::Gruppe> 
 
         mysqlx::SqlStatement query = session.sql(
             "SELECT id, Name "
-            "FROM Gruppe WHERE id IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?))"
+            "FROM Gruppe WHERE id IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
         );
         result = query.bind(id).execute();
 
@@ -184,7 +180,7 @@ int DatabaseOperator::getKategorien(const int64_t id, std::vector<db::raw::Kateg
 
         mysqlx::SqlStatement query = session.sql(
             "SELECT id, Name "
-            "FROM Kategorie WHERE id IN (SELECT Kategorie FROM RechteKategorie WHERE Rolle = (SELECT role FROM Users WHERE id = ?))"
+            "FROM Kategorie WHERE id IN (SELECT Kategorie FROM RechteKategorie WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
         );
         result = query.bind(id).execute();
 
@@ -212,14 +208,14 @@ int DatabaseOperator::getKategorien(const int64_t id, std::vector<db::raw::Kateg
 int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient, std::vector<db::resolved::Dokument> & dokumente)
 {
     mysqlx::Session session = m_manager->getSession();
-
+    
     try {
         mysqlx::SqlResult result;
 
         mysqlx::SqlStatement query = session.sql(
-            "SELECT d.Name, u.last_name, u.first_name, d.Gruppe, g.Name, d.Kategorie, k.Name "
-            "FROM Dokumente d JOIN Users u on d.Author = u.id JOIN Gruppe g ON d.Gruppe = g.id JOIN Kategorie k ON d.Kategorie = k.id "
-            "WHERE d.Kategorie IN (SELECT Kategorie FROM RechteKategorie WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "SELECT d.Name, u.login, d.Gruppe, g.Name, d.id "
+            "FROM Dokumente d JOIN Users u on d.Author = u.id JOIN Gruppe g ON d.Gruppe = g.id "
+            "WHERE EXISTS (SELECT * FROM RechteKategorie rk JOIN Kategorienzuordnung kz ON kz.Kategorie = rk.Kategorie WHERE kz.Dokument = d.id AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) "
             "AND d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
             "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
             "AND d.Klient = ? "
@@ -231,11 +227,24 @@ int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient,
             db::resolved::Dokument nextDokument;
 
             nextDokument.name = std::string(row[0]);
-            nextDokument.authorName = std::string(row[1]) + std::string(row[2]);
-            nextDokument.gruppeId = row[3];
-            nextDokument.gruppeName = std::string(row[4]);
-            nextDokument.kategorieId = row[5];
-            nextDokument.kategorieName = std::string(row[6]);
+            nextDokument.authorName = std::string(row[1]);
+            nextDokument.gruppeId = row[2];
+            nextDokument.gruppeName = std::string(row[3]);
+
+            mysqlx::SqlResult resultInner;
+
+            mysqlx::SqlStatement queryInner = session.sql(
+            "SELECT k.Name, k.id "
+            "FROM Kategorie k "
+            "WHERE EXISTS (SELECT * FROM RechteKategorie rk WHERE rk.Kategorie = k.id AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "AND EXISTS (SELECT * FROM Kategorienzuordnung kz WHERE kz.Dokument = ?) "
+            );
+            resultInner = queryInner.bind(id).bind(row[4]).execute();
+            for(mysqlx::Row rowInner : resultInner) {
+                nextDokument.kategorieName.push_back(std::string(rowInner[0]));
+                nextDokument.kategorieId.push_back(rowInner[1]);
+            }
+
 
             dokumente.push_back(nextDokument);
 
@@ -258,18 +267,33 @@ int DatabaseOperator::getDokumentFile(const int64_t id, const db::raw::Dokument 
     try {
         mysqlx::SqlResult result;
 
+        std::string KatVektor;
+
+        for(int i = 0; i < dokument.kategorie.size(); i++){
+            if(i > 0) KatVektor.append(", ?");
+            else KatVektor.append("?");
+        }
+
         mysqlx::SqlStatement query = session.sql(
             "SELECT d.Datei "
             "FROM Dokumente d "
-            "WHERE d.Kategorie IN (SELECT Kategorie FROM RechteKategorie WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
-            "AND d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
             "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
             "AND d.Klient = ? "
             "AND d.Gruppe = ? "
-            "AND d.Kategorie = ? "
+            "AND EXISTS (SELECT * FROM Kategorienzuordnung kz WHERE kz.Dokument = d.id AND kz.Kategorie IN ( "
+            + KatVektor +
+            " ) AND EXISTS (SELECT * FROM RechteKategorie rk WHERE rk.Kategorie = kz.Kategorie AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) )"
             "AND d.Name = ? "
         );
-        result = query.bind(id).bind(id).bind(id).bind(dokument.klient).bind(dokument.gruppe).bind(dokument.kategorie).bind(dokument.name).execute();
+
+        query.bind(id).bind(id).bind(dokument.klient).bind(dokument.gruppe);
+        
+        for(int i = 0; i < dokument.kategorie.size(); i++){
+            query.bind(dokument.kategorie.at(i));
+        }
+
+        result = query.bind(id).bind(dokument.name).execute();
 
         mysqlx::Row row = result.fetchOne();
 
@@ -290,7 +314,67 @@ int DatabaseOperator::getDokumentFile(const int64_t id, const db::raw::Dokument 
     return -1;
 }
 
-int DatabaseOperator::getNewDokumentFile(const int64_t id, const db::raw::Dokument dokument, std::string & filepath)
+int DatabaseOperator::deleteDokumentFile(const int64_t id, const db::raw::Dokument dokument, std::string & filepath)
+{
+    mysqlx::Session session = m_manager->getSession();
+
+    try {
+        mysqlx::SqlResult result;
+
+        mysqlx::SqlStatement query = session.sql(
+            "SELECT d.Datei "
+            "FROM Dokumente d "
+            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
+            "AND d.Klient = ? "
+            "AND d.Gruppe = ? "
+            "AND EXISTS (SELECT * FROM Kategorienzuordnung kz "
+                "WHERE kz.Dokument = d.id "
+                "AND EXISTS (SELECT * FROM RechteKategorie rk "
+                    "WHERE rk.Kategorie = kz.Kategorie "
+                    "AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) )"
+            "AND d.Name = ? "
+        );
+
+        result = query.bind(id).bind(id).bind(dokument.klient).bind(dokument.gruppe).bind(id).bind(dokument.name).execute();
+
+        mysqlx::Row row = result.fetchOne();
+
+        if (!row) {
+            std::cout << "File not found: " << dokument.name << std::endl;
+            return 2;
+        }
+
+        filepath = std::string(row[0]);
+
+        query = session.sql(
+            "DELETE "
+            "FROM Dokumente d "
+            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
+            "AND d.Klient = ? "
+            "AND d.Gruppe = ? "
+            "AND EXISTS (SELECT * FROM Kategorienzuordnung kz "
+                "WHERE kz.Dokument = d.id "
+                "AND EXISTS (SELECT * FROM RechteKategorie rk "
+                    "WHERE rk.Kategorie = kz.Kategorie "
+                    "AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) )"
+            "AND d.Name = ? "
+        );
+
+        query.bind(id).bind(id).bind(dokument.klient).bind(dokument.gruppe).bind(id).bind(dokument.name).execute();
+
+        return 0;
+    }
+    catch (const mysqlx::Error &err) {
+        std::cerr << "Database Query Error: " << err.what() << std::endl;
+        return 1;
+    }
+
+    return -1;
+}
+
+int DatabaseOperator::setNewDokumentFile(const int64_t id, const db::raw::Dokument dokument, std::string & filepath)
 {
     mysqlx::Session session = m_manager->getSession();
 
@@ -298,17 +382,30 @@ int DatabaseOperator::getNewDokumentFile(const int64_t id, const db::raw::Dokume
 
         mysqlx::SqlResult result;
 
+        std::string KatVektor;
+
+        for(int i = 0; i < dokument.kategorie.size(); i++){
+            if(i > 0) KatVektor.append(", ?");
+            else KatVektor.append("?");
+        }
+
         mysqlx::SqlStatement query = session.sql(
             "SELECT u.id "
             "FROM Users u "
             "WHERE u.id = ? "
             "AND EXISTS(SELECT Gruppe FROM RechteGruppe WHERE Rolle = u.role AND Gruppe = ?) "
-            "AND EXISTS(SELECT Kategorie FROM RechteKategorie WHERE Rolle = u.role AND Kategorie = ?) "
+            "AND EXISTS(SELECT Kategorie FROM RechteKategorie WHERE Rolle = u.role AND Kategorie IN ( " + KatVektor + " )) "
             "AND EXISTS(SELECT Klient FROM Betreuungen WHERE Betreuer = u.id AND Klient = ?) "
-            "AND NOT EXISTS(SELECT id FROM Dokumente WHERE Gruppe = ? AND Kategorie = ? AND Klient = ? AND Name = ?) "
+            "AND NOT EXISTS(SELECT id FROM Dokumente WHERE Gruppe = ? AND Klient = ? AND Name = ?) "
         );
 
-        result = query.bind(id).bind(dokument.gruppe).bind(dokument.kategorie).bind(dokument.klient).bind(dokument.gruppe).bind(dokument.kategorie).bind(dokument.klient).bind(dokument.name).execute();
+        query.bind(id).bind(dokument.gruppe);
+
+        for(int i = 0; i < dokument.kategorie.size(); i++){
+            query.bind(dokument.kategorie.at(i));
+        }
+
+        result = query.bind(dokument.klient).bind(dokument.gruppe).bind(dokument.klient).bind(dokument.name).execute();
 
         mysqlx::Row row = result.fetchOne();
 
@@ -317,13 +414,13 @@ int DatabaseOperator::getNewDokumentFile(const int64_t id, const db::raw::Dokume
             return 2;
         }
 
-        filepath = ("/documents/" + std::to_string(dokument.klient) + "-" + std::to_string(dokument.kategorie) + "-" + std::to_string(dokument.gruppe) + "-" + dokument.name);
+        filepath = ("/documents/" + std::to_string(dokument.klient) + "-" + std::to_string(dokument.gruppe) + "-" + dokument.name);
         
         query = session.sql(
-            "INSERT INTO Dokumente (Name, Datei, Klient, Gruppe, Kategorie, Author) "
-            "VALUES(?, ?, ?, ?, ?, ?) "
+            "INSERT INTO Dokumente (Name, Datei, Klient, Gruppe, Author) "
+            "VALUES(?, ?, ?, ?, ?) "
         );
-        result = query.bind(dokument.name).bind(filepath).bind(dokument.klient).bind(dokument.gruppe).bind(dokument.kategorie).bind(id).execute();
+        result = query.bind(dokument.name).bind(filepath).bind(dokument.klient).bind(dokument.gruppe).bind(id).execute();
 
         result.getWarningsCount();
 
@@ -331,6 +428,23 @@ int DatabaseOperator::getNewDokumentFile(const int64_t id, const db::raw::Dokume
             std::cout << "Could not insert file: " << dokument.name << std::endl;
             filepath = "";
             return 2;
+        }
+
+        query = session.sql(
+            "SELECT id "
+            "FROM Dokumente "
+            "WHERE Datei = ? "
+        );
+        result = query.bind(filepath).execute();
+
+        row = result.fetchOne();
+
+        for(int  i = 0; i < dokument.kategorie.size(); i++){
+            query = session.sql(
+                "INSERT INTO Kategorienzuordnung (Kategorie , Dokument) "
+                "VALUES(?, ?) "
+            );
+            result = query.bind(dokument.kategorie.at(i)).bind(row[0]).execute();
         }
 
         return 0;
@@ -606,6 +720,50 @@ int DatabaseOperator::changePass(const int64_t id, const std::string oldPass, co
     return -1;
 }
 
+int DatabaseOperator::createUserByService(const int64_t id, const db::raw::User & newUser)
+{
+    mysqlx::Session session = m_manager->getSession();
+    int32_t role = 0;
+    try {
+        mysqlx::SqlResult result;
+
+        mysqlx::SqlStatement query = session.sql(
+            "SELECT role "
+            "FROM Users "
+            "WHERE id = ? "
+        );
+        result = query.bind(id).execute();
+
+
+        mysqlx::Row row = result.fetchOne();
+
+        if (!row) {
+            std::cerr << "User not found" << std::endl;
+            return 2;
+        }
+        
+        role = row[0];
+    }
+    catch (const mysqlx::Error &err) {
+        std::cerr << "Database Query Error: " << err.what() << std::endl;
+        return 1;
+    }
+    
+    session.close();
+
+    if(role != 1){
+            std::cerr << "User not authorized" << std::endl;
+            return 3;
+    }else{
+        std::string newPass = random_string(std::size_t(10));
+        std::cerr << newPass << '\n'; //nur bis ich die mailfunktion eingerichtet habe
+        return createUser(newUser, newPass);
+    }
+
+
+    return -1;
+}
+
 std::string DatabaseOperator::makeHash(const std::string& pass, const std::string& salt)
 {
     std::string input = pass + salt; // Salzen, später noch pfeffern
@@ -680,4 +838,22 @@ int DatabaseOperator::selectUser(const std::string& login, const uint64_t& id, d
     }
 
     return -1;
+}
+
+std::string DatabaseOperator::random_string(std::size_t length)
+{
+    std::string buffer(length, '\0');
+
+    if (RAND_bytes(reinterpret_cast<unsigned char*>(buffer.data()),
+                   static_cast<int>(length)) != 1) {
+        throw std::runtime_error("RAND_bytes failed");
+    }
+    constexpr char hex[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(buffer.size() * 2);
+    for (unsigned char b : buffer) {
+        out += hex[b >> 4];
+        out += hex[b & 0x0F];
+    }
+    return out;
 }

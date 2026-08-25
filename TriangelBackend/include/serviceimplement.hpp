@@ -44,6 +44,13 @@ namespace services {
         private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
     };
     
+    class DeleteDocumentService final : public triangel::DeleteDocumentService::Service {
+        public:
+            DeleteDocumentService(DatabaseOperator&, const triangel::auth::JwtManager&);
+            grpc::Status DeleteDocument(grpc::ServerContext*, const triangel::DeleteDocumentRequest*, triangel::DeleteDocumentReply*) override;
+        private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
+    };
+    
     class SendDocumentService final : public triangel::SendDocumentService::Service {
         public:
             SendDocumentService(DatabaseOperator&, const triangel::auth::JwtManager&);
@@ -76,6 +83,13 @@ namespace services {
         public:
             PasswordChangeService(DatabaseOperator&, const triangel::auth::JwtManager&);
             grpc::Status PasswordChange(grpc::ServerContext*, const triangel::PasswordChangeRequest*, triangel::PasswordChangeReply*) override;
+        private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
+    };
+    
+    class CreateUserService final : public triangel::CreateUserService::Service {
+        public:
+            CreateUserService(DatabaseOperator&, const triangel::auth::JwtManager&);
+            grpc::Status CreateUser(grpc::ServerContext*, const triangel::CreateUserRequest*, triangel::CreateUserReply*) override;
         private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
     };
     

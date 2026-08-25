@@ -2,6 +2,10 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:management_triangel/global.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:management_triangel/src/generated/triangel.pb.dart';
+import 'package:fixnum/fixnum.dart' as fn;
+import 'dart:typed_data';
+import 'dart:io';
 
 class DocumentsScreen extends StatefulWidget {
   const DocumentsScreen({super.key});
@@ -16,7 +20,8 @@ class _DocumentsState extends State<DocumentsScreen>{
   void initState() {
     super.initState();
 
-    selectedCategories.addAll(documentCategoryList);
+    selectedCategories.addAll(documentCategoryListId);
+    selectedDocumentGroup = documentGroupListId.first;
 
     dropDownChildren = DropdownMenu<String>(
       dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
@@ -25,8 +30,8 @@ class _DocumentsState extends State<DocumentsScreen>{
         initialSelection: childList.first,
         onSelected: (value) {
           if(value != null){
-            selectedChild = childList.indexOf(value);
-            updateDocumentList();
+            selectedChild = childListId.elementAt(childList.indexOf(value));
+            getDocumentsFromServer();
           }
         },
     );
@@ -38,31 +43,47 @@ class _DocumentsState extends State<DocumentsScreen>{
         initialSelection: documentGroupList.first,
         onSelected: (value) {
           if(value != null){
-            selectedDocumentGroup = documentGroupList.indexOf(value);
+            selectedDocumentGroup = documentGroupListId.elementAt(documentGroupList.indexOf(value));
             updateDocumentList();
           }
         },
     );
     
-    updateDocumentList();
+    getDocumentsFromServer();
 
   }
   
-  List<(int, String, int, int)> selectedDocumentList = <(int, String, int, int)>[(0, '', 0, 0)];
+  List<(int, String, int, List<int>, String)> selectedDocumentList = <(int, String, int, List<int>, String)>[];
   int selectedDocument = 0;
 
   DropdownMenu<String> dropDownChildren = DropdownMenu<String>(dropdownMenuEntries: [],);
   DropdownMenu<String> dropDownDocumnentGroup = DropdownMenu<String>(dropdownMenuEntries: [],);
 
-  void updateDocumentList(){
+  final _authorController = TextEditingController();
+
+  void getDocumentsFromServer() async{
+    DocumentsReply docs = await globalGrpcClient.getDocuments(fn.Int64(selectedChild));
+    documentList.clear();
+    for(int i = 0; i < docs.dokumente.length; i++){
+      List<int> katList = [];
+      for(int j = 0; j < docs.dokumente.elementAt(i).kategorie.length; j++){
+        katList.add(docs.dokumente.elementAt(i).kategorie.elementAt(j).id.toInt());
+      }
+      documentList.add((docs.dokumente[i].klient.toInt(), docs.dokumente[i].name, docs.dokumente[i].gruppe.id.toInt(), katList, docs.dokumente[i].author));
+    }
+    updateDocumentList();
+  }
+
+  void updateDocumentList() {
     setState(() {
       selectedDocument = 0;
       selectedDocumentList = [];
       for(int i = 0; i < documentList.length; i++){
-        if(documentList[i].$1 == selectedChild && documentList[i].$3 == selectedDocumentGroup && selectedCategories.contains(documentCategoryList[documentList[i].$4])){
+        if(documentList[i].$1 == selectedChild && documentList[i].$3 == selectedDocumentGroup && selectedCategories.toSet().intersection(documentList[i].$4.toSet()).isNotEmpty){
           selectedDocumentList.add(documentList[i]);
         }
       }
+       _authorController.text = (selectedDocumentList.isNotEmpty) ? '${"Author: "} ${selectedDocumentList.elementAt(selectedDocument).$5}' : '';
     });
   }
 
@@ -109,13 +130,13 @@ class _DocumentsState extends State<DocumentsScreen>{
                               itemBuilder: (context, index) {
                                 return ListTile(
                                   title : Text(documentCategoryList[index]),
-                                  tileColor: selectedCategories.contains(documentCategoryList[index]) ? Colors.blue : Colors.white,
+                                  tileColor: selectedCategories.contains(documentCategoryListId[index]) ? Colors.blue : Colors.white,
                                   onTap: () {
                                     setState((){
-                                      if(selectedCategories.contains(documentCategoryList[index])){
-                                        selectedCategories.removeAt(selectedCategories.indexOf(documentCategoryList[index]));
+                                      if(selectedCategories.contains(documentCategoryListId[index])){
+                                        selectedCategories.removeAt(selectedCategories.indexOf(documentCategoryListId[index]));
                                       }else{
-                                        selectedCategories.add(documentCategoryList[index]);
+                                        selectedCategories.add(documentCategoryListId[index]);
                                       }
                                       updateDocumentList();
                                     });
@@ -148,6 +169,7 @@ class _DocumentsState extends State<DocumentsScreen>{
                                   onTap: () {
                                     setState((){
                                       selectedDocument = index;
+                                      _authorController.text = '${"Author: "} ${selectedDocumentList.elementAt(selectedDocument).$5}';
                                     });
                                   }
                                 );
@@ -168,20 +190,37 @@ class _DocumentsState extends State<DocumentsScreen>{
               flex: 2,
               child: Row(
                 children: [
+                  Expanded(
+                    flex: 3
+                    , child: TextField(controller: _authorController,)
+                  ),
                   Spacer(
-                    flex: 20
+                    flex: 18
                   ),
                   Expanded(
                     flex: 3,
                     child: FilledButton(
                       onPressed: () async {
-                        String? outputFile = await FilePicker.platform.saveFile(
-                          dialogTitle: 'Please select an output file:',
-                          fileName: 'output-file.pdf',
+                        Dokument getDoc = Dokument(name: documentList.elementAt(selectedDocument).$2
+                          , gruppe: IdObjekt(id: fn.Int64(documentList.elementAt(selectedDocument).$3))
+                          , klient: fn.Int64(documentList.elementAt(selectedDocument).$1));
+                        
+                        for(int i = 0; i < documentList.elementAt(selectedDocument).$4.length; i++){
+                          getDoc.kategorie.add(IdObjekt(id: fn.Int64(documentList.elementAt(selectedDocument).$4.elementAt(i))));
+                        }
+
+                        final DocumentReply doc = await globalGrpcClient.getDocument(getDoc);
+                        
+                        final Uint8List preppedFile = Uint8List.fromList(doc.file);
+
+                        final String? outputFile = await FilePicker.platform.saveFile(
+                          dialogTitle: 'Bitte Speicherort auswählen:',
+                          fileName: documentList.elementAt(selectedDocument).$2,
+                          bytes: preppedFile
                         );
 
-                        if (outputFile == null) {
-                          // User canceled the picker
+                        if (outputFile == null && (Platform.isWindows || Platform.isLinux)) {
+                          await File(outputFile!).writeAsBytes(preppedFile);
                         }
                       },
                       child: Text('Herunterladen')),
@@ -192,9 +231,12 @@ class _DocumentsState extends State<DocumentsScreen>{
                   Expanded(
                     flex: 3,
                     child: FilledButton(
-                      onPressed: () {
-                        
-                      },
+                      onPressed: (selectedDocumentList.isNotEmpty && selectedDocumentList.elementAt(selectedDocument).$5 == loginName) ? () async{
+                        await globalGrpcClient.deleteDocument(Dokument(name: selectedDocumentList.elementAt(selectedDocument).$2
+                          , gruppe: IdObjekt(id: fn.Int64(selectedDocumentList.elementAt(selectedDocument).$3))
+                          , klient: fn.Int64(selectedDocumentList.elementAt(selectedDocument).$1)));
+                        getDocumentsFromServer();
+                      } :null ,
                       child: Text('Löschen')),
                   ),
                   Spacer(

@@ -76,6 +76,8 @@ class LoginScreen extends StatelessWidget {
 
                         if (loginResult.errorCode.isEmpty){
 
+                          loginName = _nameController.text;
+
                           globalGrpcClient.setAuthToken(loginResult.accessToken);
 
                           darkBG = Color.fromRGBO(loginResult.darkbg.r, loginResult.darkbg.g, loginResult.darkbg.b, 1);

@@ -21,11 +21,6 @@ namespace services {
         const std::string private_key =
             readFile(requiredEnv("TRIANGEL_TLS_KEY"));
 
-        std::cerr << "Certificate bytes: " << certificate.size() << '\n';
-        std::cerr << "Certificate prefix: [" << certificate.substr(0, 64) << "]\n";
-        std::cerr << "Key bytes: " << private_key.size() << '\n';
-        std::cerr << "Key prefix: [" << private_key.substr(0, 48) << "]\n";
-
         grpc::SslServerCredentialsOptions options(
             GRPC_SSL_DONT_REQUEST_CLIENT_CERTIFICATE);
 
@@ -44,10 +39,12 @@ namespace services {
     grpc::Status AuthServiceImpl::Login(grpc::ServerContext* context, const triangel::LoginRequest* request, triangel::LoginReply* reply) {
         std::int64_t user_id = 0;
         std::int32_t forceReset = 0;
-        if (database_.checkUser(request->username(), request->password(), user_id, forceReset) != 0)
+        std::int32_t role = 0;
+        if (database_.checkUser(request->username(), request->password(), user_id, forceReset, role) != 0)
             return {grpc::StatusCode::UNAUTHENTICATED, "Nutzername oder Passwort inkorrekt."};
         reply->set_access_token(jwt_.issue(user_id, request->username()));
         reply->set_forceresetpass(forceReset);
+        reply->set_role(role);
         std::vector<db::raw::Klient> klientenVector;
         database_.getKlienten(user_id, klientenVector);
         for(int i = 0;i < klientenVector.size();i++){
@@ -119,19 +116,21 @@ namespace services {
             triangel::Dokument* dokument = reply->add_dokumente();
             dokument->set_name(documents.at(i).name);
             dokument->set_author(documents.at(i).authorName);
+            dokument->set_klient(request->klientid());
 
             triangel::IdObjekt* gruppe = dokument->mutable_gruppe();
             gruppe->set_id(documents.at(i).gruppeId);
             gruppe->set_bezeichnung(documents.at(i).gruppeName);
             
-            triangel::IdObjekt* kategorie = dokument->mutable_kategorie();
-            kategorie->set_id(documents.at(i).kategorieId);
-            kategorie->set_bezeichnung(documents.at(i).kategorieName);
+            for(int j = 0; j <documents.at(i).kategorieId.size(); j++){
+                triangel::IdObjekt* kategorie = dokument->add_kategorie();
+                kategorie->set_id(documents.at(i).kategorieId.at(j));
+                kategorie->set_bezeichnung(documents.at(i).kategorieName.at(j));
+            }
         }
 
         return grpc::Status::OK;
     };
-
 
     DocumentService::DocumentService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
@@ -145,7 +144,9 @@ namespace services {
         std::string filePath;
         dokument.name = request->dokument().name();
         dokument.gruppe = request->dokument().gruppe().id();
-        dokument.kategorie = request->dokument().kategorie().id();
+        for(int i = 0; i < request->dokument().kategorie().size();i++){
+            dokument.kategorie.push_back(request->dokument().kategorie().at(i).id());
+        }
         dokument.klient = request->dokument().klient();
 
         database_.getDokumentFile(principal.user_id, dokument, filePath);
@@ -170,6 +171,27 @@ namespace services {
 
         return grpc::Status::OK;
     };
+
+    DeleteDocumentService::DeleteDocumentService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status DeleteDocumentService::DeleteDocument(grpc::ServerContext* context, const triangel::DeleteDocumentRequest* request, triangel::DeleteDocumentReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Dokument dokument;
+        std::string filePath;
+        dokument.name = request->dokument().name();
+        dokument.gruppe = request->dokument().gruppe().id();
+        dokument.klient = request->dokument().klient();
+
+        database_.deleteDokumentFile(principal.user_id, dokument, filePath);
+
+        std::remove(filePath.c_str());
+
+        return grpc::Status::OK;
+    };
     
     SendDocumentService::SendDocumentService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
@@ -183,10 +205,12 @@ namespace services {
         std::string filePath;
         dokument.name = request->dokument().name();
         dokument.gruppe = request->dokument().gruppe().id();
-        dokument.kategorie = request->dokument().kategorie().id();
+        for(int i = 0; i < request->dokument().kategorie().size();i++){
+            dokument.kategorie.push_back(request->dokument().kategorie().at(i).id());
+        }
         dokument.klient = request->dokument().klient();
 
-        if (database_.getNewDokumentFile(principal.user_id, dokument, filePath) == 0){
+        if (database_.setNewDokumentFile(principal.user_id, dokument, filePath) == 0){
             if(!filePath.empty()){
                 std::ofstream documentFile(filePath, std::ios::binary);
                 documentFile.write(request->file().data(), request->file().size());
@@ -316,5 +340,33 @@ namespace services {
         database_.changePass(principal.user_id, request->oldpassword(), request->newpassword());
 
         return grpc::Status::OK;
+    };
+
+    CreateUserService::CreateUserService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status CreateUserService::CreateUser(grpc::ServerContext* context, const triangel::CreateUserRequest* request, triangel::CreateUserReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::User newUser;
+        newUser.login = request->loginname();
+        newUser.email = request->email();
+        newUser.firstName = request->fname();
+        newUser.lastName = request->lname();
+        newUser.role = request->role();
+
+        int rc = database_.createUserByService(principal.user_id, newUser);
+
+
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
     };
 }

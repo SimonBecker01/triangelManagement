@@ -20,6 +20,10 @@ service DocumentService {
   rpc GetDocument(DocumentRequest) returns (DocumentReply);
 }
 
+service DeleteDocumentService {
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentReply);
+}
+
 service SendDocumentService {
   rpc SendDocument(SendDocumentRequest) returns (SendDocumentReply);
 }
@@ -38,6 +42,10 @@ service ZeiteintragService {
 
 service PasswordChangeService {
   rpc PasswordChange(PasswordChangeRequest) returns (PasswordChangeReply);
+}
+
+service CreateUserService {
+  rpc CreateUser(CreateUserRequest) returns (CreateUserReply);
 }
 
 
@@ -78,7 +86,7 @@ message Zeiteintrag {
 message Dokument {
   string name = 1;
   IdObjekt Gruppe = 2;
-  IdObjekt Kategorie = 3;
+  repeated IdObjekt Kategorie = 3;
   string author = 4;
   int64 klient = 5;
 }
@@ -102,6 +110,7 @@ message LoginReply {
   Color lightbg = 4;
   repeated Klient klienten = 5;
   int32 forceResetPass = 6;
+  int32 role = 7;
 }
 
 message DocumentConfigRequest {
@@ -127,6 +136,14 @@ message DocumentRequest {
 
 message DocumentReply {
   bytes file = 1;
+}
+
+message DeleteDocumentRequest {
+  Dokument dokument = 1;
+}
+
+message DeleteDocumentReply {
+  
 }
 
 message SendDocumentRequest {
@@ -168,5 +185,17 @@ message PasswordChangeRequest {
 }
 
 message PasswordChangeReply {
+  string error_code = 1;
+}
+
+message CreateUserRequest {
+  string loginName = 1;
+  string email = 2;
+  string fname = 3;
+  string lname = 4;
+  int32 role = 5;
+}
+
+message CreateUserReply {
   string error_code = 1;
 }

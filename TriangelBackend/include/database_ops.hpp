@@ -12,7 +12,7 @@ public:
     DatabaseOperator(DatabaseManager&);
     ~DatabaseOperator();
     int createUser(const db::raw::User&, const std::string& pass);
-    int checkUser(const std::string&, const std::string&, int64_t&, int32_t&);
+    int checkUser(const std::string&, const std::string&, int64_t&, int32_t&, int32_t&);
     
 
     int getKlienten(const int64_t, std::vector<db::raw::Klient>&);
@@ -23,18 +23,21 @@ public:
     int getKategorien(const int64_t, std::vector<db::raw::Kategorie>&);
     int getDokumenteAuthor(const int64_t, const int64_t, std::vector<db::resolved::Dokument>&);
     int getDokumentFile(const int64_t, const db::raw::Dokument, std::string&);
-    int getNewDokumentFile(const int64_t, const db::raw::Dokument, std::string&);
+    int deleteDokumentFile(const int64_t, const db::raw::Dokument, std::string&);
+    int setNewDokumentFile(const int64_t, const db::raw::Dokument, std::string&);
     int getTaetigkeiten(std::vector<db::raw::Taetigkeit>&);
     int getZeiteintraege(const int64_t, const std::string, const std::string, std::vector<db::raw::Zeiterfassung>&);
     int addZeiteintrag(const int64_t, const db::raw::Zeiterfassung);
     int changeZeiteintrag(const int64_t, const db::raw::Zeiterfassung);
     int deleteZeiteintrag(const int64_t, const db::raw::Zeiterfassung);
     int changePass(const int64_t, const std::string, const std::string);
+    int createUserByService(const int64_t, const db::raw::User&);
     
 
 
 private:
     std::string makeHash(const std::string&, const std::string&);
+    std::string random_string(std::size_t);
     DatabaseManager* m_manager;
 
     int selectUser(const std::string& login, const uint64_t& id, db::raw::User& user);

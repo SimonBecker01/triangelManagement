@@ -17,6 +17,8 @@ int selectedChild = 0;
 int selectedActivity = 0;
 int selectedDocumentGroup = 0;
 
+String loginName = '';
+
 List<String> childList = <String>[];
 List<int> childListId = <int>[];
 List<String> activityList = <String>[''];
@@ -25,11 +27,11 @@ List<String> documentGroupList = <String>[''];
 List<int> documentGroupListId = <int>[];
 List<String> documentCategoryList = <String>[''];
 List<int> documentCategoryListId = <int>[];
-List<(int, String, int, int)> documentList = <(int, String, int, int)>[(0, '', 0, 0)];
+List<(int, String, int, List<int>, String)> documentList = <(int, String, int, List<int>, String)>[];
 
 final globalGrpcClient = grpcp.GrpcClient.instance;
 
-List<String> selectedCategories = [];
+List<int> selectedCategories = [];
 
 List<(TimeOfDay, TimeOfDay, int, int, String, int)> activityOnDayList = <(TimeOfDay, TimeOfDay, int, int, String, int)>[];
 

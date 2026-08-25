@@ -42,7 +42,7 @@ namespace db::raw {
         std::string datei;
         uint64_t klient;
         uint64_t gruppe;
-        uint64_t kategorie;
+        std::vector<uint64_t> kategorie;
         uint64_t author;
         std::optional<uint64_t> vorlage;
     };

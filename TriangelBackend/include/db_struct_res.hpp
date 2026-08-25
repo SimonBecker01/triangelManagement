@@ -38,8 +38,8 @@ struct Dokument {
     std::string klientName;
     uint64_t gruppeId;
     std::string gruppeName;
-    uint64_t kategorieId;
-    std::string kategorieName;
+    std::vector<uint64_t> kategorieId;
+    std::vector<std::string> kategorieName;
     std::string authorName;
     std::optional<std::string> vorlageName;
 };
