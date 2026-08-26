@@ -40,6 +40,7 @@ namespace services {
         std::int64_t user_id = 0;
         std::int32_t forceReset = 0;
         std::int32_t role = 0;
+        std::cerr << request->username() << "!!\n";
         if (database_.checkUser(request->username(), request->password(), user_id, forceReset, role) != 0)
             return {grpc::StatusCode::UNAUTHENTICATED, "Nutzername oder Passwort inkorrekt."};
         reply->set_access_token(jwt_.issue(user_id, request->username()));
