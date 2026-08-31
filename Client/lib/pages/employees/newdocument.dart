@@ -101,9 +101,9 @@ class _NewDocumentState extends State<NewDocumentScreen>{
   Future<void> _upload() async {
     Dokument setDoc = Dokument(
       author: loginName,
-      name: _fileNameController.text,
+      name: _fileUploadNameController.text,
       gruppe: IdObjekt(
-          id: fn.Int64(documentGroupListId.elementAt(selectedDocumentGroup))),
+          id: fn.Int64(selectedDocumentGroup)),
       klient: fn.Int64(selectedChild),
     );
 

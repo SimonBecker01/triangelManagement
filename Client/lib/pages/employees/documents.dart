@@ -355,7 +355,7 @@ class _DocumentsState extends State<DocumentsScreen>{
               controller: _authorController,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Author',
+                labelText: 'Autor',
               ),
             ),
             const SizedBox(height: 16),
