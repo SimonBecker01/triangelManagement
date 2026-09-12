@@ -32,6 +32,18 @@ Widget logoutAction(BuildContext context) {
   );
 }
 
+Widget changePassAction(BuildContext context) {
+  return IconButton(
+    onPressed: () {
+      Navigator.of(context).pushNamed(
+        '/changepass',
+      );
+    },
+    icon: const Icon(Icons.password, color: Colors.black54),
+    tooltip: 'Passwort ändern',
+  );
+}
+
 int selectedChild = 0;
 int selectedActivity = 0;
 int selectedDocumentGroup = 0;

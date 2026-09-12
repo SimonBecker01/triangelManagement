@@ -20,6 +20,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
   
   final _fileUploadNameController = TextEditingController();
   final _fileNameController = TextEditingController();
+  String shadowFilename = "";
 
   @override
   void dispose() {
@@ -92,7 +93,8 @@ class _NewDocumentState extends State<NewDocumentScreen>{
     FilePickerResult? result = await FilePicker.platform.pickFiles();
 
     if (result != null) {
-      _fileNameController.text = result.files.single.path!;
+      shadowFilename = result.files.single.path!;
+      _fileNameController.text = result.files.single.name;
     } else {
       // User canceled the picker
     }
@@ -115,9 +117,9 @@ class _NewDocumentState extends State<NewDocumentScreen>{
     int rc = 1;
 
     if (_fileUploadNameController.text.isNotEmpty ||
-        _fileNameController.text.isNotEmpty) {
+        shadowFilename.isNotEmpty) {
       final Uint8List preppedFile =
-          await File(_fileNameController.text).readAsBytes();
+          await File(shadowFilename).readAsBytes();
       if (preppedFile.isNotEmpty) {
         rc = 0;
         await globalGrpcClient.sendDocument(setDoc, preppedFile);
@@ -236,7 +238,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
                           enabled: true,
                           decoration: const InputDecoration(
                             border: OutlineInputBorder(),
-                            labelText: 'Hochladen als...',
+                            labelText: 'Hochladen mit diesem Namen...',
                           ),
                         ),
                       ),
@@ -318,7 +320,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
               enabled: true,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Hochladen als...',
+                labelText: 'Hochladen mit diesem Namen...',
               ),
             ),
             const SizedBox(height: 16),

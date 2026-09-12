@@ -8,7 +8,7 @@ class MenuScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: standardAppBar(actions: [logoutAction(context)]),
+      appBar: standardAppBar(actions: [changePassAction(context), logoutAction(context)]),
       body: LayoutBuilder(
         builder: (context, constraints) {
           if (useWideLayout(constraints)) {

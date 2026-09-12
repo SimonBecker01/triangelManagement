@@ -6,6 +6,7 @@ import 'package:management_triangel/pages/employees/login.dart';
 import 'package:management_triangel/pages/employees/menu.dart';
 import 'package:management_triangel/pages/employees/newdocument.dart';
 import 'package:management_triangel/pages/employees/timetracker.dart';
+import 'package:management_triangel/pages/employees/changepass.dart';
 
 
 Future<void> main() async {
@@ -35,6 +36,7 @@ class TriangelManagementMain extends StatelessWidget {
         '/timetracker': (BuildContext context) => const TimetrackerScreen(),
         '/documents': (BuildContext context) => const DocumentsScreen(),
         '/newdocument': (BuildContext context) => const NewDocumentScreen(),
+        '/changepass': (BuildContext context) => const ChangePassScreen(),
       }
     );
   }

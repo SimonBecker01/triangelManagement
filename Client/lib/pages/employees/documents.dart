@@ -19,7 +19,9 @@ class _DocumentsState extends State<DocumentsScreen>{
   void initState() {
     super.initState();
 
-    selectedCategories.addAll(documentCategoryListId);
+    if(selectedCategories.isEmpty){
+      selectedCategories.addAll(documentCategoryListId);
+    }
     if (documentGroupListId.isNotEmpty) {
       selectedDocumentGroup = documentGroupListId.first;
     }
@@ -328,7 +330,7 @@ class _DocumentsState extends State<DocumentsScreen>{
   // Blöde kleine Bildschirme...
   Widget _buildNarrowLayout(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Column(

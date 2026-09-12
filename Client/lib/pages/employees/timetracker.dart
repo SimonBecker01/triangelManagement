@@ -52,7 +52,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
           TimeOfDay.now().plusMinutes(30).minute - (TimeOfDay.now().minute % 5));
 
   DateTime currSelDate = DateTime.now();
-  int currSelActivity = 0;
+  int currSelActivity = -1;
 
   @override
   void initState() {
@@ -536,7 +536,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
   // Blöde kleine Bildschirme...
   Widget _buildNarrowLayout() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: Column(
@@ -608,14 +608,14 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
               children: [
                 Expanded(
                   child: FilledButton(
-                    onPressed: _saveChange,
+                    onPressed: currSelActivity >= 0 ? _saveChange : null,
                     child: const Text('Ändern'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _delete,
+                    onPressed: currSelActivity >= 0 ? _delete : null,
                     child: const Text('Löschen'),
                   ),
                 ),
