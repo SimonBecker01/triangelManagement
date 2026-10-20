@@ -27,7 +27,7 @@ class _DocumentsState extends State<DocumentsScreen>{
     }
 
     dropDownChildren = _buildChildDropdown();
-    dropDownDocumnentGroup = _buildGroupDropdown();
+    dropDownDocumentGroup = _buildGroupDropdown();
     
     getDocumentsFromServer();
 
@@ -37,7 +37,7 @@ class _DocumentsState extends State<DocumentsScreen>{
   int selectedDocument = 0;
 
   DropdownMenu<String> dropDownChildren = DropdownMenu<String>(dropdownMenuEntries: const [],);
-  DropdownMenu<String> dropDownDocumnentGroup = DropdownMenu<String>(dropdownMenuEntries: const [],);
+  DropdownMenu<String> dropDownDocumentGroup = DropdownMenu<String>(dropdownMenuEntries: const [],);
 
   final _authorController = TextEditingController();
 
@@ -261,7 +261,7 @@ class _DocumentsState extends State<DocumentsScreen>{
                     children: [
                       Expanded(
                         flex: 3,
-                        child: dropDownDocumnentGroup,
+                        child: dropDownDocumentGroup,
                       ),
                       Expanded(
                         flex: 8,
@@ -339,7 +339,7 @@ class _DocumentsState extends State<DocumentsScreen>{
           children: [
             dropDownChildren,
             const SizedBox(height: 12),
-            dropDownDocumnentGroup,
+            dropDownDocumentGroup,
             const SizedBox(height: 12),
             const Text('Kategorien', textAlign: TextAlign.center),
             const SizedBox(height: 8),

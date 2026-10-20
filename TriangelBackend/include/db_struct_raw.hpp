@@ -28,7 +28,10 @@ namespace db::raw {
         uint64_t id;
         uint64_t betreuuer;
         uint64_t klient;
-        uint64_t vereinbarung;
+        std::string gueltigVon;
+        std::string gueltigBis;
+        uint64_t stundensatz;
+        uint64_t wochenstunden;
     };
 
     struct Rolle {
@@ -44,7 +47,6 @@ namespace db::raw {
         uint64_t gruppe;
         std::vector<uint64_t> kategorie;
         uint64_t author;
-        std::optional<uint64_t> vorlage;
     };
 
     struct Kategorie {
@@ -102,6 +104,7 @@ namespace db::raw {
         uint64_t id;
         std::string name;
         bool abrechenbar;
+        bool buchbar;
     };
 
 } // namespace db::raw

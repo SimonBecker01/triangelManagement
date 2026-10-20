@@ -1,33 +1,41 @@
 CREATE TABLE `Users`(
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `Login` VARCHAR(255) NOT NULL,
-    `last_name` VARCHAR(255) NOT NULL,
-    `first_name` VARCHAR(255) NOT NULL,
-    `email` VARCHAR(255) NOT NULL,
+    `Nachname` VARCHAR(255) NOT NULL,
+    `Vorname` VARCHAR(255) NOT NULL,
+    `Email` VARCHAR(255) NOT NULL,
     `salt` CHAR(60) NOT NULL,
     `hash` CHAR(128) NOT NULL,
-    `role` SMALLINT UNSIGNED NOT NULL,
-    `forceResetPass` SMALLINT UNSIGNED NOT NULL DEFAULT 1
+    `Rolle` SMALLINT UNSIGNED NOT NULL,
+    `forceResetPass` BOOLEAN NOT NULL DEFAULT 1
 );
 ALTER TABLE
-    `Users` ADD UNIQUE `users_last_name_first_name_email_unique`(`last_name`, `first_name`, `email`);
+    `Users` ADD UNIQUE `users_nachname_vorname_email_unique`(`Nachname`, `Vorname`, `Email`);
 ALTER TABLE
     `Users` ADD UNIQUE `users_login_unique`(`Login`);
 CREATE TABLE `Klienten`(
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `last_name` VARCHAR(255) NOT NULL,
-    `first_name` VARCHAR(255) NOT NULL
+    `Nachname` VARCHAR(255) NOT NULL,
+    `Vorname` VARCHAR(255) NOT NULL
 );
 ALTER TABLE
-    `Klienten` ADD UNIQUE `klienten_last_name_first_name_unique`(`last_name`, `first_name`);
+    `Klienten` ADD UNIQUE `klienten_nachname_vorname_unique`(`Nachname`, `Vorname`);
 CREATE TABLE `Betreuungen`(
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `Betreuer` BIGINT UNSIGNED NOT NULL,
     `Klient` BIGINT UNSIGNED NOT NULL,
-    `Vereinbarung` BIGINT UNSIGNED NOT NULL
+    `GueltigVon` DATE NULL,
+    `GueltigBis` DATE NULL,
+    `Wochenstunden` BIGINT NULL,
+    `Stundensatz` BIGINT NULL
 );
 ALTER TABLE
-    `Betreuungen` ADD UNIQUE `betreuungen_Betreuer_klient_unique`(`Betreuer`, `Klient`);
+    `Betreuungen` ADD UNIQUE `betreuungen_betreuer_klient_gueltigbis_gueltigvon_unique`(
+        `Betreuer`,
+        `Klient`,
+        `GueltigBis`,
+        `GueltigVon`
+    );
 CREATE TABLE `Rollen`(
     `id` SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `Rolle` VARCHAR(255) NOT NULL
@@ -40,8 +48,7 @@ CREATE TABLE `Dokumente`(
     `Datei` VARCHAR(255) NOT NULL,
     `Klient` BIGINT UNSIGNED NOT NULL,
     `Gruppe` BIGINT UNSIGNED NOT NULL,
-    `Author` BIGINT UNSIGNED NOT NULL,
-    `Vorlage` BIGINT UNSIGNED NULL
+    `Autor` BIGINT UNSIGNED NOT NULL
 );
 ALTER TABLE
     `Dokumente` ADD UNIQUE `dokumente_name_klient_gruppe_unique`(`Name`, `Klient`, `Gruppe`);
@@ -73,68 +80,46 @@ CREATE TABLE `RechteKategorie`(
 );
 ALTER TABLE
     `RechteKategorie` ADD UNIQUE `rechtekategorie_rolle_kategorie_unique`(`Rolle`, `Kategorie`);
-CREATE TABLE `Vorlagen`(
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `Name` VARCHAR(255) NOT NULL,
-    `Datei` VARCHAR(255) NOT NULL
-);
-ALTER TABLE
-    `Vorlagen` ADD UNIQUE `vorlagen_name_unique`(`Name`);
-CREATE TABLE `Variablen`(
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `Vorlage` BIGINT UNSIGNED NOT NULL,
-    `Name` VARCHAR(255) NOT NULL
-);
-ALTER TABLE
-    `Variablen` ADD UNIQUE `variablen_vorlage_name_unique`(`Vorlage`, `Name`);
-CREATE TABLE `VariablenWerte`(
-    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    `Variable` BIGINT UNSIGNED NOT NULL,
-    `Dokument` BIGINT UNSIGNED NOT NULL,
-    `Wert` VARCHAR(255) NOT NULL
-);
-ALTER TABLE
-    `VariablenWerte` ADD UNIQUE `variablenwerte_variable_dokument_unique`(`Variable`, `Dokument`);
 CREATE TABLE `Zeiterfassung`(
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `Betreuung` BIGINT UNSIGNED NOT NULL,
     `Taetigkeit` BIGINT UNSIGNED NOT NULL,
-    `von` DATETIME NOT NULL,
-    `bis` DATETIME NOT NULL,
-	`Beschreibung` VARCHAR(5000)
+    `Von` DATETIME NOT NULL,
+    `Bis` DATETIME NOT NULL,
+    `Beschreibung` VARCHAR(255) NOT NULL DEFAULT ''
 );
-
 CREATE TABLE `Taetigkeit`(
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `Name` VARCHAR(255) NOT NULL,
-    `Abrechenbar` TINYINT NOT NULL
+    `Abrechenbar` BOOLEAN NOT NULL,
+    `Buchbar` BOOLEAN NOT NULL
 );
+ALTER TABLE
+    `Taetigkeit` ADD UNIQUE `taetigkeit_name_unique`(`Name`);
 CREATE TABLE `Kategorienzuordnung`(
-    `Kategorie` BIGINT UNSIGNED NOT NULL,
-    `Dokument` BIGINT UNSIGNED NOT NULL,
+    `Kategorie` BIGINT NOT NULL,
+    `Dokument` BIGINT NOT NULL,
     PRIMARY KEY(`Kategorie`, `Dokument`)
 );
-CREATE TABLE `Misc`(
-    `name` VARCHAR(255) NOT NULL,
-    `value` VARCHAR(255) NOT NULL,
-    PRIMARY KEY(`name`)
+CREATE TABLE `Systemeinstellungen`(
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    `Name` VARCHAR(255) NOT NULL,
+    `Wert` BIGINT NOT NULL
 );
 ALTER TABLE
-    `RechteGruppe` ADD CONSTRAINT `rechtegruppe_gruppe_foreign` FOREIGN KEY(`Gruppe`) REFERENCES `Gruppe`(`id`) ON DELETE CASCADE;
+    `Systemeinstellungen` ADD UNIQUE `systemeinstellungen_name_unique`(`Name`);
 ALTER TABLE
-    `Dokumente` ADD CONSTRAINT `dokumente_vorlage_foreign` FOREIGN KEY(`Vorlage`) REFERENCES `Vorlagen`(`id`);
+    `RechteGruppe` ADD CONSTRAINT `rechtegruppe_gruppe_foreign` FOREIGN KEY(`Gruppe`) REFERENCES `Gruppe`(`id`) ON DELETE CASCADE;
 ALTER TABLE
     `Kategorienzuordnung` ADD CONSTRAINT `kategorienzuordnung_kategorie_foreign` FOREIGN KEY(`Kategorie`) REFERENCES `Kategorie`(`id`) ON DELETE CASCADE;
 ALTER TABLE
     `Dokumente` ADD CONSTRAINT `dokumente_klient_foreign` FOREIGN KEY(`Klient`) REFERENCES `Klienten`(`id`);
 ALTER TABLE
-    `Users` ADD CONSTRAINT `users_role_foreign` FOREIGN KEY(`role`) REFERENCES `Rollen`(`id`);
+    `Users` ADD CONSTRAINT `users_rolle_foreign` FOREIGN KEY(`Rolle`) REFERENCES `Rollen`(`id`);
 ALTER TABLE
     `Zeiterfassung` ADD CONSTRAINT `zeiterfassung_betreuung_foreign` FOREIGN KEY(`Betreuung`) REFERENCES `Betreuungen`(`id`);
 ALTER TABLE
     `RechteKategorie` ADD CONSTRAINT `rechtekategorie_kategorie_foreign` FOREIGN KEY(`Kategorie`) REFERENCES `Kategorie`(`id`) ON DELETE CASCADE;
-ALTER TABLE
-    `Kategorienzuordnung` ADD CONSTRAINT `kategorienzuordnung_dokument_foreign` FOREIGN KEY(`Dokument`) REFERENCES `Dokumente`(`id`) ON DELETE CASCADE;
 ALTER TABLE
     `RechteKategorie` ADD CONSTRAINT `rechtekategorie_rolle_foreign` FOREIGN KEY(`Rolle`) REFERENCES `Rollen`(`id`) ON DELETE CASCADE;
 ALTER TABLE
@@ -142,18 +127,12 @@ ALTER TABLE
 ALTER TABLE
     `Zeiterfassung` ADD CONSTRAINT `zeiterfassung_taetigkeit_foreign` FOREIGN KEY(`Taetigkeit`) REFERENCES `Taetigkeit`(`id`);
 ALTER TABLE
-    `VariablenWerte` ADD CONSTRAINT `variablenwerte_dokument_foreign` FOREIGN KEY(`Dokument`) REFERENCES `Dokumente`(`id`);
-ALTER TABLE
     `Dokumente` ADD CONSTRAINT `dokumente_gruppe_foreign` FOREIGN KEY(`Gruppe`) REFERENCES `Gruppe`(`id`);
 ALTER TABLE
-    `Dokumente` ADD CONSTRAINT `dokumente_author_foreign` FOREIGN KEY(`Author`) REFERENCES `Users`(`id`);
-ALTER TABLE
-    `Betreuungen` ADD CONSTRAINT `betreuungen_vereinbarung_foreign` FOREIGN KEY(`Vereinbarung`) REFERENCES `Dokumente`(`id`);
-ALTER TABLE
-    `Variablen` ADD CONSTRAINT `variablen_vorlage_foreign` FOREIGN KEY(`Vorlage`) REFERENCES `Vorlagen`(`id`);
+    `Dokumente` ADD CONSTRAINT `dokumente_autor_foreign` FOREIGN KEY(`Autor`) REFERENCES `Users`(`id`);
 ALTER TABLE
     `Betreuungen` ADD CONSTRAINT `betreuungen_klient_foreign` FOREIGN KEY(`Klient`) REFERENCES `Klienten`(`id`) ON DELETE CASCADE;
 ALTER TABLE
-    `VariablenWerte` ADD CONSTRAINT `variablenwerte_variable_foreign` FOREIGN KEY(`Variable`) REFERENCES `Variablen`(`id`);
+    `Betreuungen` ADD CONSTRAINT `betreuungen_betreuer_foreign` FOREIGN KEY(`Betreuer`) REFERENCES `Users`(`id`) ON DELETE CASCADE;
 ALTER TABLE
-    `Betreuungen` ADD CONSTRAINT `betreuungen_Betreuer_foreign` FOREIGN KEY(`Betreuer`) REFERENCES `Users`(`id`) ON DELETE CASCADE;
+    `Kategorienzuordnung` ADD CONSTRAINT `kategorienzuordnung_dokument_foreign` FOREIGN KEY(`Dokument`) REFERENCES `Dokumente`(`id`) ON DELETE CASCADE;

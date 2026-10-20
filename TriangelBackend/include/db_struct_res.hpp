@@ -28,7 +28,10 @@ struct Betreuung {
     uint64_t id;
     std::string betreuuerName;
     std::string klientName;
-    std::string vereinbarungName;
+    std::string gueltigVon;
+    std::string gueltigBis;
+    uint64_t stundenlohn;
+    uint64_t wochenstunden;
 };
 
 struct Dokument {

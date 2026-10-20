@@ -1,5 +1,10 @@
 
-add_executable(triangelbackend main.cpp jwt_auth.cpp database_mgr.cpp database_ops.cpp serviceimplement.cpp)
+add_executable(triangelbackend main.cpp utils.cpp jwt_auth.cpp database_ops.cpp serviceimplement.cpp mailer.cpp)
+set_target_properties(triangelbackend PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "/opt/triangelservice/"
+    INSTALL_RPATH "$ORIGIN/lib"
+    BUILD_WITH_INSTALL_RPATH TRUE
+)
 
 target_include_directories(triangelbackend PRIVATE ${CMAKE_SOURCE_DIR}/include ${MYSQL_INCLUDE})
 

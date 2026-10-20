@@ -1,15 +1,19 @@
 #include "database_ops.hpp"
+
 #include <iostream>
 #include <openssl/evp.h>
 #include <sstream>
 #include <iomanip>
 #include <openssl/rand.h>
 
-
-DatabaseOperator::DatabaseOperator(DatabaseManager& dbm) : m_manager(&dbm){
+DatabaseOperator::DatabaseOperator(const std::string& conString, int numbCon) : m_dbClient(conString, mysqlx::ClientOption::POOL_MAX_SIZE, numbCon){
+    mailer::init();
+    mailer::SmtpConfig::load(m_mailConf);
 }
 
 DatabaseOperator::~DatabaseOperator(){
+    m_dbClient.close();
+    mailer::cleanup();
 }
 
 int DatabaseOperator::createUser(const db::raw::User& user, const std::string& pass)
@@ -24,7 +28,7 @@ int DatabaseOperator::createUser(const db::raw::User& user, const std::string& p
         
         if(hash.length() == 128){
             
-            mysqlx::Session session = m_manager->getSession();
+            mysqlx::Session session = m_dbClient.getSession();
 
             try {
                 mysqlx::SqlStatement query = session.sql(
@@ -72,7 +76,7 @@ int DatabaseOperator::checkUser(const std::string& login, const std::string& pas
 
 int DatabaseOperator::getKlienten(const int64_t user_id, std::vector<db::raw::Klient>& klienten){
     
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
@@ -106,16 +110,16 @@ int DatabaseOperator::getKlienten(const int64_t user_id, std::vector<db::raw::Kl
     return -1;
 }
 
-int DatabaseOperator::getMiscValue(const std::string& name, std::string& value)
+int DatabaseOperator::getSettingsValue(const std::string& name, std::string& value)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
 
         mysqlx::SqlStatement query = session.sql(
             "SELECT value "
-            "FROM Misc WHERE name = ?"
+            "FROM Settings WHERE name = ?"
         );
         result = query.bind(name).execute();
 
@@ -123,7 +127,7 @@ int DatabaseOperator::getMiscValue(const std::string& name, std::string& value)
         mysqlx::Row row = result.fetchOne();
 
         if (!row) {
-            std::cout << "Misc Value not found: " << name << std::endl;
+            std::cout << "Settings Value not found: " << name << std::endl;
             return 2;
         }
         
@@ -141,14 +145,14 @@ int DatabaseOperator::getMiscValue(const std::string& name, std::string& value)
 
 int DatabaseOperator::getGruppen(const int64_t id, std::vector<db::raw::Gruppe> & gruppen)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
 
         mysqlx::SqlStatement query = session.sql(
             "SELECT id, Name "
-            "FROM Gruppe WHERE id IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "FROM Gruppe WHERE id IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?))"
         );
         result = query.bind(id).execute();
 
@@ -173,14 +177,14 @@ int DatabaseOperator::getGruppen(const int64_t id, std::vector<db::raw::Gruppe> 
 
 int DatabaseOperator::getKategorien(const int64_t id, std::vector<db::raw::Kategorie> & kategorien)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
 
         mysqlx::SqlStatement query = session.sql(
             "SELECT id, Name "
-            "FROM Kategorie WHERE id IN (SELECT Kategorie FROM RechteKategorie WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "FROM Kategorie WHERE id IN (SELECT Kategorie FROM RechteKategorie WHERE Rolle = (SELECT role FROM Users WHERE id = ?))"
         );
         result = query.bind(id).execute();
 
@@ -207,7 +211,7 @@ int DatabaseOperator::getKategorien(const int64_t id, std::vector<db::raw::Kateg
 
 int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient, std::vector<db::resolved::Dokument> & dokumente)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
     
     try {
         mysqlx::SqlResult result;
@@ -215,7 +219,7 @@ int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient,
         mysqlx::SqlStatement query = session.sql(
             "SELECT d.Name, u.login, d.Gruppe, g.Name, d.id "
             "FROM Dokumente d JOIN Users u on d.Author = u.id JOIN Gruppe g ON d.Gruppe = g.id "
-            "WHERE EXISTS (SELECT * FROM RechteKategorie rk JOIN Kategorienzuordnung kz ON kz.Kategorie = rk.Kategorie WHERE kz.Dokument = d.id AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "WHERE EXISTS (SELECT * FROM RechteKategorie rk JOIN Kategorienzuordnung kz ON kz.Kategorie = rk.Kategorie WHERE kz.Dokument = d.id AND rk.Rolle = (SELECT role FROM Users WHERE id = ?))"
             "AND d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
             "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
             "AND d.Klient = ? "
@@ -233,6 +237,7 @@ int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient,
 
             mysqlx::SqlResult resultInner;
 
+
             mysqlx::SqlStatement queryInner = session.sql(
             "SELECT k.Name, k.id "
             "FROM Kategorie k "
@@ -240,6 +245,7 @@ int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient,
             "AND EXISTS (SELECT * FROM Kategorienzuordnung kz WHERE kz.Dokument = ?) "
             );
             resultInner = queryInner.bind(id).bind(row[4]).execute();
+
             for(mysqlx::Row rowInner : resultInner) {
                 nextDokument.kategorieName.push_back(std::string(rowInner[0]));
                 nextDokument.kategorieId.push_back(rowInner[1]);
@@ -262,7 +268,7 @@ int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient,
 
 int DatabaseOperator::getDokumentFile(const int64_t id, const db::raw::Dokument dokument, std::string & filepath)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
@@ -316,7 +322,7 @@ int DatabaseOperator::getDokumentFile(const int64_t id, const db::raw::Dokument 
 
 int DatabaseOperator::deleteDokumentFile(const int64_t id, const db::raw::Dokument dokument, std::string & filepath)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
@@ -341,7 +347,7 @@ int DatabaseOperator::deleteDokumentFile(const int64_t id, const db::raw::Dokume
         mysqlx::Row row = result.fetchOne();
 
         if (!row) {
-            std::cout << "File not found: " << dokument.name << std::endl;
+            std::cerr << "File not found: " << dokument.name << std::endl;
             return 2;
         }
 
@@ -376,7 +382,7 @@ int DatabaseOperator::deleteDokumentFile(const int64_t id, const db::raw::Dokume
 
 int DatabaseOperator::setNewDokumentFile(const int64_t id, const db::raw::Dokument dokument, std::string & filepath)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
 
     try {
 
@@ -401,6 +407,7 @@ int DatabaseOperator::setNewDokumentFile(const int64_t id, const db::raw::Dokume
 
         query.bind(id).bind(dokument.gruppe);
 
+
         for(int i = 0; i < dokument.kategorie.size(); i++){
             query.bind(dokument.kategorie.at(i));
         }
@@ -420,12 +427,13 @@ int DatabaseOperator::setNewDokumentFile(const int64_t id, const db::raw::Dokume
             "INSERT INTO Dokumente (Name, Datei, Klient, Gruppe, Author) "
             "VALUES(?, ?, ?, ?, ?) "
         );
+            std::cerr << "FICK DICH!5" << std::endl;
         result = query.bind(dokument.name).bind(filepath).bind(dokument.klient).bind(dokument.gruppe).bind(id).execute();
 
         result.getWarningsCount();
 
         if (result.getWarningsCount() > 0) {
-            std::cout << "Could not insert file: " << dokument.name << std::endl;
+            std::cerr << "Could not insert file: " << dokument.name << std::endl;
             filepath = "";
             return 2;
         }
@@ -457,42 +465,72 @@ int DatabaseOperator::setNewDokumentFile(const int64_t id, const db::raw::Dokume
     return -1;
 }
 
-int DatabaseOperator::getTaetigkeiten(std::vector<db::raw::Taetigkeit> & taetigkeiten)
+int DatabaseOperator::getTaetigkeiten(const int64_t id, std::vector<db::raw::Taetigkeit> & taetigkeiten)
 {
-    mysqlx::Session session = m_manager->getSession();
+    int rc = checkGF(id);
 
-    try {
-        mysqlx::SqlResult result;
+    mysqlx::Session session = m_dbClient.getSession();
+    mysqlx::SqlResult result;
 
-        mysqlx::SqlStatement query = session.sql(
-            "SELECT id, Name, Abrechenbar "
-            "FROM Taetigkeit "
-        );
-        result = query.execute();
+    if(rc != 0){
+        try {
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Name, Abrechenbar "
+                "FROM Taetigkeit "
+                "WHERE Buchbar = 1 "
+            );
+            result = query.execute();
 
-        for(mysqlx::Row row : result) {
-            db::raw::Taetigkeit nextTaetigkeit;
+            for(mysqlx::Row row : result) {
+                db::raw::Taetigkeit nextTaetigkeit;
 
-            nextTaetigkeit.id = row[0];
-            nextTaetigkeit.name = std::string(row[1]);
-            nextTaetigkeit.abrechenbar = bool(row[2]);
+                nextTaetigkeit.id = row[0];
+                nextTaetigkeit.name = std::string(row[1]);
+                nextTaetigkeit.abrechenbar = bool(row[2]);
 
-            taetigkeiten.push_back(nextTaetigkeit);
+                taetigkeiten.push_back(nextTaetigkeit);
+            }
+
+            return 0;
         }
+        catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }else{
 
-        return 0;
-    }
-    catch (const mysqlx::Error &err) {
-        std::cerr << "Database Query Error: " << err.what() << std::endl;
-        return 1;
-    }
+        try {
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Name, Abrechenbar, Buchbar "
+                "FROM Taetigkeit "
+            );
+            result = query.execute();
 
+            for(mysqlx::Row row : result) {
+                db::raw::Taetigkeit nextTaetigkeit;
+
+                nextTaetigkeit.id = row[0];
+                nextTaetigkeit.name = std::string(row[1]);
+                nextTaetigkeit.abrechenbar = bool(row[2]);
+                nextTaetigkeit.buchbar = bool(row[3]);
+
+                taetigkeiten.push_back(nextTaetigkeit);
+            }
+
+            return 0;
+        }
+        catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+    
     return -1;
 }
 
 int DatabaseOperator::getZeiteintraege(const int64_t id, const std::string vonDt, const std::string bisDt, std::vector<db::raw::Zeiterfassung> & zeiteintraege)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
     try {
 
         mysqlx::SqlResult result;
@@ -535,7 +573,7 @@ int DatabaseOperator::getZeiteintraege(const int64_t id, const std::string vonDt
 
 int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfassung neuerEintrag)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
     try {
         mysqlx::SqlResult result;
 
@@ -593,7 +631,7 @@ int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfass
 
 int DatabaseOperator::changeZeiteintrag(const int64_t id, const db::raw::Zeiterfassung neuerEintrag)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
     try {
         mysqlx::SqlResult result;
 
@@ -652,7 +690,7 @@ int DatabaseOperator::changeZeiteintrag(const int64_t id, const db::raw::Zeiterf
 
 int DatabaseOperator::deleteZeiteintrag(const int64_t id, const db::raw::Zeiterfassung neuerEintrag)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
     try {
         mysqlx::SqlResult result;
 
@@ -693,7 +731,7 @@ int DatabaseOperator::deleteZeiteintrag(const int64_t id, const db::raw::Zeiterf
 
 int DatabaseOperator::changePass(const int64_t id, const std::string oldPass, const std::string newPass)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
     db::raw::User user;
     selectUser("", id, user);
 
@@ -704,7 +742,7 @@ int DatabaseOperator::changePass(const int64_t id, const std::string oldPass, co
 
             mysqlx::SqlStatement query = session.sql(
                 "UPDATE Users "
-                "SET hash = ? "
+                "SET hash = ?, forceResetPass = 0 "
                 "WHERE id = ? "
             );
             result = query.bind(makeHash(newPass, user.salt)).bind(id).execute();
@@ -722,47 +760,847 @@ int DatabaseOperator::changePass(const int64_t id, const std::string oldPass, co
 
 int DatabaseOperator::createUserByService(const int64_t id, const db::raw::User & newUser)
 {
-    mysqlx::Session session = m_manager->getSession();
-    int32_t role = 0;
-    try {
-        mysqlx::SqlResult result;
 
-        mysqlx::SqlStatement query = session.sql(
-            "SELECT role "
-            "FROM Users "
-            "WHERE id = ? "
-        );
-        result = query.bind(id).execute();
+    int rc = checkGF(id);
 
-
-        mysqlx::Row row = result.fetchOne();
-
-        if (!row) {
-            std::cerr << "User not found" << std::endl;
-            return 2;
-        }
-        
-        role = row[0];
-    }
-    catch (const mysqlx::Error &err) {
-        std::cerr << "Database Query Error: " << err.what() << std::endl;
-        return 1;
-    }
-    
-    session.close();
-
-    if(role != 1){
-            std::cerr << "User not authorized" << std::endl;
-            return 3;
+    if(rc != 0){
+            return rc;
     }else{
         std::string newPass = random_string(std::size_t(10));
-        std::cerr << newPass << '\n'; //nur bis ich die mailfunktion eingerichtet habe
-        return createUser(newUser, newPass);
+        if(mailer::sendPasswordReset(m_mailConf, newUser.email, newPass)){
+            return createUser(newUser, newPass);
+        }
     }
 
 
     return -1;
 }
+
+int DatabaseOperator::getUsersList(const int64_t id, std::vector<db::raw::User> & userList)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+            
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Login, last_name, first_name, email, role "
+                "FROM Users "
+            );
+            mysqlx::SqlResult result = query.execute();
+
+            for(mysqlx::Row row : result) {
+                db::raw::User nextEintrag;
+
+                nextEintrag.id = row[0];
+                nextEintrag.login = std::string(row[1]);
+                nextEintrag.lastName = std::string(row[2]);
+                nextEintrag.firstName = std::string(row[3]);
+                nextEintrag.email = std::string(row[4]);
+                nextEintrag.role = (int32_t)row[5];
+
+                userList.push_back(nextEintrag);
+            }
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+int DatabaseOperator::getRolesList(const int64_t id, std::vector<db::raw::Rolle> & roleList)
+{
+
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Rolle "
+                "FROM Rollen "
+            );
+            mysqlx::SqlResult result = query.execute();
+
+            for(mysqlx::Row row : result) {
+                db::raw::Rolle nextEintrag;
+
+                nextEintrag.id = (int32_t)row[0];
+                nextEintrag.rolle = std::string(row[1]);
+
+                roleList.push_back(nextEintrag);
+            }
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+int DatabaseOperator::changeUser(const int64_t id, const db::raw::User & changedUser)
+{
+
+
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql("");
+            if(changedUser.forceReset){
+                query = session.sql(
+                    "UPDATE Users "
+                    "SET Login = ?, last_name = ?, first_name = ?, email = ?, role = ?, forceResetPass = 1 "
+                    "WHERE id = ? "
+                );
+            }else{
+                query = session.sql(
+                    "UPDATE Users "
+                    "SET Login = ?, last_name = ?, first_name = ?, email = ?, role = ? "
+                    "WHERE id = ? "
+                );
+            }
+            
+            mysqlx::SqlResult result = query.bind(changedUser.login).bind(changedUser.lastName).bind(changedUser.firstName).bind(changedUser.email).bind(changedUser.role).bind(changedUser.id).execute();
+
+            if(result.getAffectedItemsCount() == 1){
+
+                bool resetPassword = changedUser.forceReset;
+
+                if(!resetPassword){
+                    query = session.sql(
+                        "SELECT forceResetPass "
+                        "FROM Users "
+                        "WHERE id = ? "
+                    );
+                    result = query.bind(changedUser.id).execute();
+
+                    mysqlx::Row row = result.fetchOne();
+
+                    if(row != 0 && static_cast<int>(row[0]) != 0){
+                        resetPassword = true;
+                    }
+                    
+                }
+
+                if(resetPassword){
+                    return resetPasswordAndMail(changedUser.id);
+                }
+
+                return 0;
+            }else{
+                std::cerr << "No exact user found!" << std::endl;
+            }
+            
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::getRechteKategorien(const int64_t id, std::vector<db::raw::RechteKategorie> & rechtekategorienList)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT Rolle, Kategorie "
+                "FROM RechteKategorie "
+            );
+            mysqlx::SqlResult result = query.execute();
+
+            for(mysqlx::Row row : result) {
+                db::raw::RechteKategorie nextEintrag;
+
+                nextEintrag.role = (int32_t)row[0];
+                nextEintrag.kategorie = row[1];
+
+                rechtekategorienList.push_back(nextEintrag);
+            }
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::getRechteGruppe(const int64_t id, std::vector<db::raw::RechteGruppe> & rechtegruppeList)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT Rolle, Gruppe "
+                "FROM RechteGruppe "
+            );
+            mysqlx::SqlResult result = query.execute();
+
+            for(mysqlx::Row row : result) {
+                db::raw::RechteGruppe nextEintrag;
+
+                nextEintrag.role = (int32_t)row[0];
+                nextEintrag.gruppe = row[1];
+
+                rechtegruppeList.push_back(nextEintrag);
+            }
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::setRechte(const int64_t id, const uint64_t rolle, std::vector<uint64_t>& rechtekategorienListNeu, std::vector<uint64_t>& rechtegruppeListNeu)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlResult result;
+
+            std::vector<uint64_t> inserts;
+            std::vector<uint64_t> deletes;
+            
+            std::string listVektor;
+
+
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT Gruppe "
+                "FROM RechteGruppe "
+                "ORDER BY Gruppe ASC "
+            );
+            result = query.execute();
+
+
+            std::vector<uint64_t> rechtegruppeListAlt;
+
+            for(mysqlx::Row row : result) {
+                rechtegruppeListAlt.push_back(row[0]);
+            }
+
+            std::sort(rechtegruppeListNeu.begin(), rechtegruppeListNeu.end());
+
+            std::set_difference(rechtegruppeListNeu.begin(), rechtegruppeListNeu.end(),
+                rechtegruppeListAlt.begin(), rechtegruppeListAlt.end(),
+                std::back_inserter(inserts));
+            std::set_difference(rechtegruppeListAlt.begin(), rechtegruppeListAlt.end(),
+                rechtegruppeListNeu.begin(), rechtegruppeListNeu.end(),
+                std::back_inserter(deletes));
+
+            
+            for(int i = 0; i < deletes.size(); i++){
+                if(i > 0) listVektor.append(", ?");
+                else listVektor.append("?");
+            }
+
+            query = session.sql(
+                "DELETE "
+                "FROM RechteGruppe "
+                "WHERE Rolle = ? "
+                "AND Gruppe IN ( " + listVektor + " ) "
+            );
+
+            query.bind(rolle);
+
+
+            for(int i = 0; i < deletes.size(); i++){
+                query.bind(deletes.at(i));
+            }
+
+            query.execute();
+
+            for(int i = 0; i < inserts.size(); i++){
+                query = session.sql(
+                    "INSERT INTO RechteGruppe (Rolle, Gruppe)"
+                    "VALUES( ?, ? ) "
+                );
+                query.bind(rolle).bind(inserts.at(i)).execute();
+            }
+
+            inserts.clear();
+            deletes.clear();
+            listVektor.clear();
+
+            query = session.sql(
+                "SELECT Kategorie "
+                "FROM RechteKategorie "
+                "ORDER BY Kategorie ASC "
+            );
+            result = query.execute();
+
+
+            std::vector<uint64_t> rechtekategorienListAlt;
+
+            for(mysqlx::Row row : result) {
+                rechtekategorienListAlt.push_back(row[0]);
+            }
+
+            std::sort(rechtekategorienListNeu.begin(), rechtekategorienListNeu.end());
+
+            std::set_difference(rechtekategorienListNeu.begin(), rechtekategorienListNeu.end(),
+                rechtekategorienListAlt.begin(), rechtekategorienListAlt.end(),
+                std::back_inserter(inserts));
+            std::set_difference(rechtekategorienListAlt.begin(), rechtekategorienListAlt.end(),
+                rechtekategorienListNeu.begin(), rechtekategorienListNeu.end(),
+                std::back_inserter(deletes));
+
+            
+            for(int i = 0; i < deletes.size(); i++){
+                if(i > 0) listVektor.append(", ?");
+                else listVektor.append("?");
+            }
+
+            query = session.sql(
+                "DELETE "
+                "FROM RechteKategorie "
+                "WHERE Rolle = ? "
+                "AND Kategorie IN ( " + listVektor + " ) "
+            );
+
+            query.bind(rolle);
+
+
+            for(int i = 0; i < deletes.size(); i++){
+                query.bind(deletes.at(i));
+            }
+
+            query.execute();
+
+            for(int i = 0; i < inserts.size(); i++){
+                query = session.sql(
+                    "INSERT INTO RechteKategorie (Rolle, Kategorie)"
+                    "VALUES( ?, ? ) "
+                );
+                query.bind(rolle).bind(inserts.at(i)).execute();
+            }
+            
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::changeKategorie(const int64_t id, const db::raw::Kategorie& kat)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "UPDATE Kategorie "
+                "SET Name = ? "
+                "WHERE id = ? "
+            );
+            query.bind(kat.name).bind(kat.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::changeGruppe(const int64_t id, const db::raw::Gruppe& grup)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "UPDATE Gruppe "
+                "SET Name = ? "
+                "WHERE id = ? "
+            );
+            query.bind(grup.name).bind(grup.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::deleteKategorie(const int64_t id, const db::raw::Kategorie& kat)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "DELETE FROM Kategorie "
+                "WHERE id = ? "
+            );
+            query.bind(kat.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::deleteGruppe(const int64_t id, const db::raw::Gruppe& grup)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT COUNT(*) "
+                "FROM Dokumente "
+                "WHERE Gruppe = ? "
+            );
+            mysqlx::SqlResult result = query.bind(grup.id).execute();
+            
+            
+            mysqlx::Row row = result.fetchOne();
+
+            if(row != 0 && static_cast<int>(row[0]) != 0){
+                std::cerr << "Gruppe can not be deleted, still in use" << std::endl;
+                return 2;
+            }
+
+            query = session.sql(
+                "DELETE FROM Gruppe "
+                "WHERE id = ? "
+            );
+            query.bind(grup.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::setNewKategorie(const int64_t id, const db::raw::Kategorie& kat)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "INSERT INTO Kategorie (Name) "
+                "VALUES(?) "
+            );
+            mysqlx::SqlResult result = query.bind(kat.name).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::setNewGruppe(const int64_t id, const db::raw::Gruppe& grup)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "INSERT INTO Gruppe (Name) "
+                "VALUES(?) "
+            );
+            mysqlx::SqlResult result = query.bind(grup.name).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::changeTaetigkeit(const int64_t id, const db::raw::Taetigkeit& taet)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "UPDATE Taetigkeit "
+                "SET Name = ? "
+                ", Abrechenbar = ? "
+                ", Buchbar = ? "
+                "WHERE id = ? "
+            );
+            mysqlx::SqlResult result = query.bind(taet.name).bind((taet.abrechenbar)?1:0).bind((taet.buchbar)?1:0).bind(taet.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::deleteTaetigkeit(const int64_t id, const db::raw::Taetigkeit& taet)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT COUNT(*) "
+                "FROM Zeiterfassung "
+                "WHERE Taetigkeit = ? "
+            );
+            mysqlx::SqlResult result = query.bind(taet.id).execute();
+
+            
+            mysqlx::Row row = result.fetchOne();
+
+            if(row != 0 && static_cast<int>(row[0]) != 0){
+                std::cerr << "Taetigkeit can not be deleted, still in use" << std::endl;
+                return 2;
+            }
+
+            query = session.sql(
+                "DELETE FROM Taetigkeit "
+                "WHERE id = ? "
+            );
+            query.bind(taet.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::setNewTaetigkeit(const int64_t id, const db::raw::Taetigkeit& taet)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "INSERT INTO Taetigkeit (Name, Abrechenbar, Buchbar) "
+                "VALUES(?, ?, ?) "
+            );
+            mysqlx::SqlResult result = query.bind(taet.name).bind((taet.abrechenbar)?1:0).bind((taet.buchbar)?1:0).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::getBetreuungen(const int64_t id, std::vector<db::raw::Betreuung>& betreuungenList)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Betreuer, Klient, DATE_FORMAT(GueltigVon,'%Y-%m-%d-%H-%i'), DATE_FORMAT(GueltigBis,'%Y-%m-%d-%H-%i'), Stundensatz, Wochenstunden "
+                "FROM Betreuungen "
+            );
+            mysqlx::SqlResult result = query.execute();
+
+            for(mysqlx::Row row : result) {
+                db::raw::Betreuung nextEintrag;
+
+                nextEintrag.id = row[0];
+                nextEintrag.betreuuer = row[1];
+                nextEintrag.klient = row[2];
+                nextEintrag.gueltigVon = std::string(row[3]);
+                nextEintrag.gueltigBis = std::string(row[4]);
+                nextEintrag.stundensatz = row[5];
+                nextEintrag.wochenstunden = row[6];
+
+                betreuungenList.push_back(nextEintrag);
+            }
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::endBetreuung(const int64_t id, const int64_t idBetreuung)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "UPDATE Betreuung"
+                "SET GueltigBis = sysdate -1 "
+                "WHERE id = ? "
+            );
+            mysqlx::SqlResult result = query.bind(idBetreuung).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::setNewBetreuung(const int64_t id, const db::raw::Betreuung& betreuung)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+
+            //TBD: Welche Einschränkungen?
+            
+            mysqlx::SqlStatement query = session.sql(
+                "INSERT INTO Betreuungen (Betreuer, Klient, GueltigBis, Stundensatz, Wochenstunden) "
+                "VALUES (?, ?, STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), ?, ?) "
+            );
+            mysqlx::SqlResult result = query.bind(betreuung.betreuuer).bind(betreuung.klient).bind(betreuung.gueltigVon).bind(betreuung.gueltigBis).bind(betreuung.stundensatz).bind(betreuung.wochenstunden).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int getAuswertungBetreuung(const int64_t, const int64_t, const std::string)
+{
+    
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+        mysqlx::Session session = m_dbClient.getSession();
+        try {
+
+            mysqlx::SqlResult result;
+
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT b.klient, z.taetigkeit, DATE_FORMAT(z.von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, z.id "
+                "FROM Betreuungen b "
+                "JOIN Zeiterfassung z "
+                "ON z.Betreuung = b.id "
+                "WHERE b.Betreuer = ? "
+                "AND z.von >= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+                "AND z.bis <= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            );
+
+            result = query.bind(id).bind(vonDt).bind(bisDt).execute();
+
+            for(mysqlx::Row row : result) {
+                db::raw::Zeiterfassung nextEintrag;
+
+                nextEintrag.klient = row[0];
+                nextEintrag.taetigkeit = row[1];
+                nextEintrag.von = std::string(row[2]);
+                nextEintrag.bis = std::string(row[3]);
+                nextEintrag.beschreibung = std::string(row[4]);
+                nextEintrag.id = row[5];
+
+
+                zeiteintraege.push_back(nextEintrag);
+            }
+
+            return 0;
+        }
+        catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+int getAuswertungBetreuer(const int64_t, const int64_t, const std::string)
+{
+    
+    mysqlx::Session session = m_dbClient.getSession();
+    try {
+
+        mysqlx::SqlResult result;
+
+        mysqlx::SqlStatement query = session.sql(
+            "SELECT b.klient, z.taetigkeit, DATE_FORMAT(z.von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, z.id "
+            "FROM Betreuungen b "
+            "JOIN Zeiterfassung z "
+            "ON z.Betreuung = b.id "
+            "WHERE b.Betreuer = ? "
+            "AND z.von >= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND z.bis <= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+        );
+
+        result = query.bind(id).bind(vonDt).bind(bisDt).execute();
+
+        for(mysqlx::Row row : result) {
+            db::raw::Zeiterfassung nextEintrag;
+
+            nextEintrag.klient = row[0];
+            nextEintrag.taetigkeit = row[1];
+            nextEintrag.von = std::string(row[2]);
+            nextEintrag.bis = std::string(row[3]);
+            nextEintrag.beschreibung = std::string(row[4]);
+            nextEintrag.id = row[5];
+
+
+            zeiteintraege.push_back(nextEintrag);
+        }
+
+        return 0;
+    }
+    catch (const mysqlx::Error &err) {
+        std::cerr << "Database Query Error: " << err.what() << std::endl;
+        return 1;
+    }
+
+    return -1;
+}
+
+
 
 std::string DatabaseOperator::makeHash(const std::string& pass, const std::string& salt)
 {
@@ -793,7 +1631,7 @@ std::string DatabaseOperator::makeHash(const std::string& pass, const std::strin
 
 int DatabaseOperator::selectUser(const std::string& login, const uint64_t& id, db::raw::User& user)
 {
-    mysqlx::Session session = m_manager->getSession();
+    mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
@@ -856,4 +1694,78 @@ std::string DatabaseOperator::random_string(std::size_t length)
         out += hex[b & 0x0F];
     }
     return out;
+}
+
+int DatabaseOperator::resetPasswordAndMail(const uint64_t userId){
+    mysqlx::Session session = m_dbClient.getSession();
+    db::raw::User user;
+    selectUser("", userId, user);
+
+    std::string newPass = random_string(20);
+
+    try {
+
+        std::string es;
+        mysqlx::SqlResult result;
+        
+
+        if(mailer::sendPasswordReset(m_mailConf, user.email, newPass, &es)){
+
+            mysqlx::SqlStatement query = session.sql(
+                "UPDATE Users "
+                "SET hash = ? "
+                "WHERE id = ? "
+            );
+            result = query.bind(makeHash(newPass, user.salt)).bind(userId).execute();
+
+            return 0;
+        }else{
+            std::cerr << "Mailing Error" << std::endl;
+            return -1;
+        }
+    }
+    catch (const mysqlx::Error &err) {
+        std::cerr << "Database Query Error: " << err.what() << std::endl;
+        return 1;
+    }
+    return 2;
+
+}
+
+int DatabaseOperator::checkGF(const uint64_t id)
+{
+    mysqlx::Session session = m_dbClient.getSession();
+    int32_t role = 0;
+    try {
+        mysqlx::SqlResult result;
+
+        mysqlx::SqlStatement query = session.sql(
+            "SELECT role "
+            "FROM Users "
+            "WHERE id = ? "
+        );
+        result = query.bind(id).execute();
+
+
+        mysqlx::Row row = result.fetchOne();
+
+        if (!row) {
+            std::cerr << "User not found" << std::endl;
+            return 3;
+        }
+        
+        role = row[0];
+
+        if(role != 1){
+            std::cerr << "User not authorized" << std::endl;
+            return 3;
+        }else{
+            return 0;
+        }
+    }catch (const mysqlx::Error &err) {
+        std::cerr << "Database Query Error: " << err.what() << std::endl;
+        return 1;
+    }
+
+    return -1;
 }

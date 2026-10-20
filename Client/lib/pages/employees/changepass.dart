@@ -3,95 +3,54 @@ import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
 import 'package:management_triangel/global.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class ChangePassScreen extends StatefulWidget {
+  const ChangePassScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<ChangePassScreen> createState() => _ChangePassScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  final _nameController = TextEditingController();
-  final _passController = TextEditingController();
+class _ChangePassScreenState extends State<ChangePassScreen> {
+  final _passOldController = TextEditingController();
+  final _passNewOneController = TextEditingController();
+  final _passNewTwoController = TextEditingController();
   final _responseController = TextEditingController();
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _passController.dispose();
+    _passOldController.dispose();
+    _passNewOneController.dispose();
+    _passNewTwoController.dispose();
     _responseController.dispose();
     super.dispose();
   }
 
-  Future<void> _login() async {
-    try {
-      final loginResult =
-          await globalGrpcClient.login(_nameController.text, _passController.text);
+  Future<void> _changePass() async {
+    if(_passNewOneController.text == _passNewTwoController.text){
+      try {
+        final changePassResult =
+            await globalGrpcClient.changePassword(_passOldController.text, _passNewOneController.text);
 
-      if (loginResult.errorCode.isEmpty) {
-        loginName = _nameController.text;
+        if (changePassResult.errorCode.isEmpty) {
 
-        globalGrpcClient.setAuthToken(loginResult.accessToken);
-
-        darkBG = Color.fromRGBO(loginResult.darkbg.r, loginResult.darkbg.g, loginResult.darkbg.b, 1);
-        lightBG = Color.fromRGBO(loginResult.lightbg.r, loginResult.lightbg.g, loginResult.lightbg.b, 1);
-
-        childList.clear();
-        childListId.clear();
-
-        for (int i = 0; i < loginResult.klienten.length; i++) {
-          childList.add(loginResult.klienten.elementAt(i).fname + loginResult.klienten.elementAt(i).nname);
-          childListId.add(loginResult.klienten.elementAt(i).id.toInt());
+          if (mounted) {
+            Navigator.of(context).pushNamed('/menu');
+          }
+        } else {
+          _responseController.text = changePassResult.errorCode;
         }
-
-        if (childList.isNotEmpty) {
-          selectedChild = childListId.first;
+      } catch (error) {
+        if (error is GrpcError && error.code == StatusCode.permissionDenied) {
+          _responseController.text = error.codeName;
         }
-
-        final docConfigResult = await globalGrpcClient.getDocumentConfig();
-
-        documentGroupList.clear();
-        documentGroupListId.clear();
-
-        for (int i = 0; i < docConfigResult.gruppen.length; i++) {
-          documentGroupList.add(docConfigResult.gruppen.elementAt(i).bezeichnung);
-          documentGroupListId.add(docConfigResult.gruppen.elementAt(i).id.toInt());
-        }
-
-        documentCategoryList.clear();
-        documentCategoryListId.clear();
-
-        for (int i = 0; i < docConfigResult.kategorien.length; i++) {
-          documentCategoryList.add(docConfigResult.kategorien.elementAt(i).bezeichnung);
-          documentCategoryListId.add(docConfigResult.kategorien.elementAt(i).id.toInt());
-        }
-
-        final taetigkeitenResult = await globalGrpcClient.getTaetigkeiten();
-
-        activityList.clear();
-        activityListId.clear();
-
-        for (int i = 0; i < taetigkeitenResult.taetigkeiten.length; i++) {
-          activityList.add(taetigkeitenResult.taetigkeiten.elementAt(i).bezeichnung);
-          activityListId.add(taetigkeitenResult.taetigkeiten.elementAt(i).id.toInt());
-        }
-
-        if (activityList.isNotEmpty) {
-          selectedActivity = activityListId.first;
-        }
-
-        if (mounted) {
-          Navigator.of(context).pushNamed('/menu');
-        }
-      } else {
-        _responseController.text = loginResult.errorCode;
       }
-    } catch (error) {
-      if (error is GrpcError && error.code == StatusCode.permissionDenied) {
-        _responseController.text = error.codeName;
-      }
-      _passController.text = '';
+    }else{
+      _responseController.text = "Neues Passwort stimmt nicht überein!";
     }
+    
+    _passOldController.text = '';
+    _passNewOneController.text = '';
+    _passNewTwoController.text = '';
   }
 
   @override
@@ -124,10 +83,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 Expanded(
                   flex : 2,
                   child : TextField(
-                    controller: _nameController,
+                    controller: _passOldController,
+                    obscureText: true,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      labelText: 'Benutzername',
+                      labelText: 'Altes Passwort',
                     ),
                   ),
                 ),
@@ -135,11 +95,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 Expanded(
                   flex : 2,
                   child : TextField(
-                    controller: _passController,
+                    controller: _passNewOneController,
                     obscureText: true,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
-                      labelText: 'Passwort',
+                      labelText: 'Neues Passwort',
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 2),
+                Expanded(
+                  flex : 2,
+                  child : TextField(
+                    controller: _passNewTwoController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Neues Passwort bestätigen',
                     ),
                   ),
                 ),
@@ -147,8 +119,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 Expanded(
                   flex: 2,
                   child: FilledButton(
-                    onPressed: _login,
-                    child: const Text('Login'),
+                    onPressed: _changePass,
+                    child: const Text('Passwort ändern'),
                   ),
                 ),
                 const Spacer(flex: 3),
@@ -177,27 +149,37 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextField(
-                controller: _nameController,
+                controller: _passOldController,
+                obscureText: true,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Benutzername',
+                  labelText: 'Altes Passwort',
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: _passController,
+                controller: _passNewOneController,
                 obscureText: true,
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  labelText: 'Passwort',
+                  labelText: 'Neues Passwort',
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _passNewTwoController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  labelText: 'Neues Passwort bestätigen',
                 ),
               ),
               const SizedBox(height: 32),
               FilledButton(
-                onPressed: _login,
+                onPressed: _changePass,
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('Login'),
+                  child: Text('Passwort ändern'),
                 ),
               ),
               const SizedBox(height: 24),

@@ -48,6 +48,78 @@ service CreateUserService {
   rpc CreateUser(CreateUserRequest) returns (CreateUserReply);
 }
 
+service GetUsersService {
+  rpc GetUsers(GetUsersRequest) returns (GetUsersReply);
+}
+
+service GetRolesService {
+  rpc GetRoles(GetRolesRequest) returns (GetRolesReply);
+}
+
+service ChangeUserService {
+  rpc ChangeUser(ChangeUserRequest) returns (ChangeUserReply);
+}
+
+service GetRechteKategorienService {
+  rpc GetRechteKategorien(GetRechteKategorienRequest) returns (GetRechteKategorienReply);
+}
+
+service GetRechteGruppeService {
+  rpc GetRechteGruppe(GetRechteGruppeRequest) returns (GetRechteGruppeReply);
+}
+
+service SetRechteService {
+  rpc SetRechte(SetRechteRequest) returns (SetRechteReply);
+}
+
+service ChangeKategorieService {
+  rpc ChangeKategorie(ChangeKategorieRequest) returns (ChangeKategorieReply);
+}
+
+service ChangeGruppeService {
+  rpc ChangeGruppe(ChangeGruppeRequest) returns (ChangeGruppeReply);
+}
+
+service DeleteKategorieService {
+  rpc DeleteKategorie(DeleteKategorieRequest) returns (DeleteKategorieReply);
+}
+
+service DeleteGruppeService {
+  rpc DeleteGruppe(DeleteGruppeRequest) returns (DeleteGruppeReply);
+}
+
+service SetNewKategorieService {
+  rpc SetNewKategorie(SetNewKategorieRequest) returns (SetNewKategorieReply);
+}
+
+service SetNewGruppeService {
+  rpc SetNewGruppe(SetNewGruppeRequest) returns (SetNewGruppeReply);
+}
+
+service ChangeTaetigkeitService {
+  rpc ChangeTaetigkeit(ChangeTaetigkeitRequest) returns (ChangeTaetigkeitReply);
+}
+
+service DeleteTaetigkeitService {
+  rpc DeleteTaetigkeit(DeleteTaetigkeitRequest) returns (DeleteTaetigkeitReply);
+}
+
+service SetNewTaetigkeitService {
+  rpc SetNewTaetigkeit(SetNewTaetigkeitRequest) returns (SetNewTaetigkeitReply);
+}
+
+service GetBetreuungenService {
+  rpc GetBetreuungen(GetBetreuungenRequest) returns (GetBetreuungenReply);
+}
+
+service EndBetreuungService {
+  rpc EndBetreuung(EndBetreuungRequest) returns (EndBetreuungReply);
+}
+
+service SetNewBetreuungService {
+  rpc SetNewBetreuung(SetNewBetreuungRequest) returns (SetNewBetreuungReply);
+}
+
 
 //types
 message Klient {
@@ -94,6 +166,36 @@ message Dokument {
 message IdObjekt {
   int64 id = 1;
   string bezeichnung = 2;
+}
+
+message UserObjekt {
+  int64 id = 1;
+  string loginName = 2;
+  string email = 3;
+  string fname = 4;
+  string lname = 5;
+  int32 role = 6;
+}
+
+message IdPair {
+  int64 idFirst = 1;
+  int64 idSecond = 2;
+}
+
+message Taetigkeit {
+  int64 id = 1;
+  string bezeichnung = 2;
+  bool abrechenbar = 3;
+  bool buchbar = 4;
+}
+
+message Betreuung {
+  int64 klientId = 1;
+  int64 betreuerId = 2;
+  Datum gueltigVon = 3;
+  Datum gueltigBis = 4;
+  int64 wochenstunden = 5;
+  int64 stundensatz = 6;
 }
 
 
@@ -159,7 +261,7 @@ message TaetigkeitRequest {
 }
 
 message TaetigkeitReply {
-  repeated IdObjekt Taetigkeiten = 1;
+  repeated Taetigkeit Taetigkeiten = 1;
 }
 
 message ZeiteintraegeRequest {
@@ -189,13 +291,152 @@ message PasswordChangeReply {
 }
 
 message CreateUserRequest {
-  string loginName = 1;
-  string email = 2;
-  string fname = 3;
-  string lname = 4;
-  int32 role = 5;
+  UserObjekt newUser = 1;
 }
 
 message CreateUserReply {
   string error_code = 1;
 }
+
+message GetUsersRequest {
+}
+
+message GetUsersReply {
+  repeated UserObjekt userList = 1;
+}
+
+message GetRolesRequest {
+}
+
+message GetRolesReply {
+  repeated IdObjekt rolesList = 1;
+}
+
+message ChangeUserRequest {
+  UserObjekt changedUser = 1;
+  int32 forceReset = 2;
+}
+
+message ChangeUserReply {
+  string error_code = 1;
+}
+
+message GetRechteKategorienRequest {
+}
+
+message GetRechteKategorienReply {
+  repeated IdPair rechteKategorien = 1;
+}
+
+message GetRechteGruppeRequest {
+}
+
+message GetRechteGruppeReply {
+  repeated IdPair rechteGruppe = 1;
+}
+
+message SetRechteRequest {
+  int64 rollenId = 1;
+  repeated int64 gruppenId = 2;
+  repeated int64 kategorienId = 3;
+}
+
+message SetRechteReply {
+  string error_code = 1;
+}
+
+message ChangeKategorieRequest {
+  IdObjekt kategorie = 1;
+}
+
+message ChangeKategorieReply {
+  string error_code = 1;
+}
+
+message ChangeGruppeRequest {
+  IdObjekt gruppe = 1;
+}
+
+message ChangeGruppeReply {
+  string error_code = 1;
+}
+
+message DeleteKategorieRequest {
+  IdObjekt kategorie = 1;
+}
+
+message DeleteKategorieReply {
+  string error_code = 1;
+}
+
+message DeleteGruppeRequest {
+  IdObjekt gruppe = 1;
+}
+
+message DeleteGruppeReply {
+  string error_code = 1;
+}
+
+message SetNewKategorieRequest {
+  IdObjekt kategorie = 1;
+}
+
+message SetNewKategorieReply {
+  string error_code = 1;
+}
+
+message SetNewGruppeRequest {
+  IdObjekt gruppe = 1;
+}
+
+message SetNewGruppeReply {
+  string error_code = 1;
+}
+
+message ChangeTaetigkeitRequest {
+  Taetigkeit taetigkeit = 1;
+}
+
+message ChangeTaetigkeitReply {
+  string error_code = 1;
+}
+
+message DeleteTaetigkeitRequest {
+  int64 taetigkeitId = 1;
+}
+
+message DeleteTaetigkeitReply {
+  string error_code = 1;
+}
+
+message SetNewTaetigkeitRequest {
+  Taetigkeit taetigkeit = 1;
+}
+
+message SetNewTaetigkeitReply {
+  string error_code = 1;
+}
+
+message GetBetreuungenRequest {
+}
+
+message GetBetreuungenReply {
+  repeated Betreuung betreuungen = 1;
+}
+
+message EndBetreuungRequest {
+  int64 betreuungId = 1;
+}
+
+message EndBetreuungReply {
+  string error_code = 1;
+}
+
+message SetNewBetreuungRequest {
+  Betreuung betreuung = 1;
+}
+
+message SetNewBetreuungReply {
+  string error_code = 1;
+}
+

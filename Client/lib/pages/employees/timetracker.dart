@@ -6,6 +6,7 @@ import 'package:management_triangel/global.dart';
 import 'package:interval_time_picker/interval_time_picker.dart';
 import 'package:management_triangel/src/generated/triangel.pb.dart';
 import 'package:fixnum/fixnum.dart' as fn;
+import 'package:management_triangel/speechttbutton.dart';
 
 extension TimeOfDayExtension on TimeOfDay {
   // Ported from org.threeten.bp;
@@ -557,7 +558,22 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
                 labelText: 'Beschreibung',
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 6),
+            OnDeviceSpeechButton(
+              onResult: (result) {
+                setState(() {
+                  _descriptionController.text = result.recognizedWords;
+                  _descriptionController.selection =
+                      TextSelection.collapsed(offset: _descriptionController.text.length);
+                });
+              },
+              onError: (error) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Speech error: ${error.errorMsg}')),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               height: 340,
               child: CalendarDatePicker(

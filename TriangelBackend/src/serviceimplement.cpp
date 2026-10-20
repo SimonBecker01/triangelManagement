@@ -1,37 +1,8 @@
-
-
 #include "serviceimplement.hpp"
 
 
 namespace services {
-    std::string requiredEnv(const char* name) {
-        if (const char* value = std::getenv(name); value && *value) return value;
-        throw std::runtime_error(std::string("Required environment variable is not set: ") + name);
-    }
-    std::string readFile(const std::string& path) {
-        std::ifstream file(path, std::ios::binary);
-        if (!file) throw std::runtime_error("Cannot read file: " + path);
-        return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
-    }
 
-    std::shared_ptr<grpc::ServerCredentials> tlsCredentials() {
-        const std::string certificate =
-            readFile(requiredEnv("TRIANGEL_TLS_CERT"));
-
-        const std::string private_key =
-            readFile(requiredEnv("TRIANGEL_TLS_KEY"));
-
-        grpc::SslServerCredentialsOptions options(
-            GRPC_SSL_DONT_REQUEST_CLIENT_CERTIFICATE);
-
-        grpc::SslServerCredentialsOptions::PemKeyCertPair pair;
-        pair.private_key = private_key;
-        pair.cert_chain = certificate;
-
-        options.pem_key_cert_pairs.push_back(std::move(pair));
-
-        return grpc::SslServerCredentials(options);
-    }
 
 
     AuthServiceImpl::AuthServiceImpl(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
@@ -40,7 +11,6 @@ namespace services {
         std::int64_t user_id = 0;
         std::int32_t forceReset = 0;
         std::int32_t role = 0;
-        std::cerr << request->username() << "!!\n";
         if (database_.checkUser(request->username(), request->password(), user_id, forceReset, role) != 0)
             return {grpc::StatusCode::UNAUTHENTICATED, "Nutzername oder Passwort inkorrekt."};
         reply->set_access_token(jwt_.issue(user_id, request->username()));
@@ -55,17 +25,17 @@ namespace services {
             nextKlient->set_fname(klientenVector.at(i).firstName);
         }
         std::string r, g, b;
-        if(database_.getMiscValue("darkBGR", r) != 0 || r.empty()) r = "88";
-        if(database_.getMiscValue("darkBGG", g) != 0 || g.empty()) r = "140";
-        if(database_.getMiscValue("darkBGB", b) != 0 || b.empty()) r = "52";
+        if(database_.getSettingsValue("darkBGR", r) != 0 || r.empty()) r = "88";
+        if(database_.getSettingsValue("darkBGG", g) != 0 || g.empty()) r = "140";
+        if(database_.getSettingsValue("darkBGB", b) != 0 || b.empty()) r = "52";
         triangel::Color* dbg = reply->mutable_darkbg();
         dbg->set_r(std::stoi(r));
         dbg->set_g(std::stoi(g));
         dbg->set_b(std::stoi(b));
         
-        if(database_.getMiscValue("lightBGR", r) != 0 || r.empty()) r = "122";
-        if(database_.getMiscValue("lightBGG", g) != 0 || g.empty()) r = "201";
-        if(database_.getMiscValue("lightBGB", b) != 0 || b.empty()) r = "67";
+        if(database_.getSettingsValue("lightBGR", r) != 0 || r.empty()) r = "122";
+        if(database_.getSettingsValue("lightBGG", g) != 0 || g.empty()) r = "201";
+        if(database_.getSettingsValue("lightBGB", b) != 0 || b.empty()) r = "67";
         triangel::Color* lbg = reply->mutable_lightbg();
         lbg->set_r(std::stoi(r));
         lbg->set_g(std::stoi(g));
@@ -213,13 +183,16 @@ namespace services {
 
         if (database_.setNewDokumentFile(principal.user_id, dokument, filePath) == 0){
             if(!filePath.empty()){
+                std::cerr << "filePath: " << filePath << std::endl;
                 std::ofstream documentFile(filePath, std::ios::binary);
                 documentFile.write(request->file().data(), request->file().size());
+                std::cerr << "rdstate: " << documentFile.rdstate() << std::endl;
                 if(documentFile.rdstate() == std::ios_base::goodbit){
                     return grpc::Status::OK;
                 }
                 return grpc::Status(grpc::StatusCode::INTERNAL, "Writing file failed");
             }
+            std::cerr << "Database: " <<  std::endl;
             return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, "Database Error");
         }
 
@@ -235,12 +208,14 @@ namespace services {
             return status;
         }
         std::vector<db::raw::Taetigkeit> taetigkeiten;
-        database_.getTaetigkeiten(taetigkeiten);
+        database_.getTaetigkeiten(principal.user_id, taetigkeiten);
 
         for(int i = 0;i < taetigkeiten.size();i++){
-            triangel::IdObjekt* gruppe = reply->add_taetigkeiten();
-            gruppe->set_id(taetigkeiten.at(i).id);
-            gruppe->set_bezeichnung(taetigkeiten.at(i).name);
+            triangel::Taetigkeit* taetigkeit = reply->add_taetigkeiten();
+            taetigkeit->set_id(taetigkeiten.at(i).id);
+            taetigkeit->set_bezeichnung(taetigkeiten.at(i).name);
+            taetigkeit->set_abrechenbar(taetigkeiten.at(i).abrechenbar);
+            taetigkeit->set_buchbar(taetigkeiten.at(i).buchbar);
         }
 
         return grpc::Status::OK;
@@ -352,15 +327,110 @@ namespace services {
         }
 
         db::raw::User newUser;
-        newUser.login = request->loginname();
-        newUser.email = request->email();
-        newUser.firstName = request->fname();
-        newUser.lastName = request->lname();
-        newUser.role = request->role();
+        newUser.login = request->newuser().loginname();
+        newUser.email = request->newuser().email();
+        newUser.firstName = request->newuser().fname();
+        newUser.lastName = request->newuser().lname();
+        newUser.role = request->newuser().role();
 
         int rc = database_.createUserByService(principal.user_id, newUser);
 
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
 
+    GetUsersService::GetUsersService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status GetUsersService::GetUsers(grpc::ServerContext* context, const triangel::GetUsersRequest* request, triangel::GetUsersReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::raw::User> userListVector;
+
+        int rc = database_.getUsersList(principal.user_id, userListVector);
+
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < userListVector.size();i++){
+            
+                triangel::UserObjekt* eintrag = reply->add_userlist();
+
+                eintrag->set_id(userListVector.at(i).id);
+                eintrag->set_loginname(userListVector.at(i).login);
+                eintrag->set_email(userListVector.at(i).email);
+                eintrag->set_fname(userListVector.at(i).firstName);
+                eintrag->set_lname(userListVector.at(i).lastName);
+                eintrag->set_role(userListVector.at(i).role);
+
+            }
+            return grpc::Status::OK;
+        case 3:
+            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Unauthorized Access");
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+    
+
+    GetRolesService::GetRolesService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status GetRolesService::GetRoles(grpc::ServerContext* context, const triangel::GetRolesRequest* request, triangel::GetRolesReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::raw::Rolle> roleListVector;
+
+        int rc = database_.getRolesList(principal.user_id, roleListVector);
+
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < roleListVector.size();i++){
+            
+                triangel::IdObjekt* eintrag = reply->add_roleslist();
+
+                eintrag->set_id(roleListVector.at(i).id);
+                eintrag->set_bezeichnung(roleListVector.at(i).rolle);
+
+            }
+            return grpc::Status::OK;
+        case 3:
+            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Unauthorized Access");
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    ChangeUserService::ChangeUserService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status ChangeUserService::ChangeUser(grpc::ServerContext* context, const triangel::ChangeUserRequest* request, triangel::ChangeUserReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::User changedUser;
+        changedUser.id = request->changeduser().id();
+        changedUser.login = request->changeduser().loginname();
+        changedUser.email = request->changeduser().email();
+        changedUser.firstName = request->changeduser().fname();
+        changedUser.lastName = request->changeduser().lname();
+        changedUser.role = request->changeduser().role();
+        changedUser.forceReset = request->forcereset() != 0;
+
+        int rc = database_.changeUser(principal.user_id, changedUser);
 
         switch (rc)
         {

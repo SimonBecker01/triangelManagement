@@ -2,11 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
 import 'package:management_triangel/global.dart';
 import 'package:management_triangel/pages/employees/documents.dart';
-import 'package:management_triangel/pages/employees/login.dart';
+import 'package:management_triangel/pages/login.dart';
 import 'package:management_triangel/pages/employees/menu.dart';
 import 'package:management_triangel/pages/employees/newdocument.dart';
 import 'package:management_triangel/pages/employees/timetracker.dart';
 import 'package:management_triangel/pages/employees/changepass.dart';
+import 'package:management_triangel/pages/employer/menuE.dart';
+import 'package:management_triangel/pages/employer/auswertungen.dart';
+import 'package:management_triangel/pages/employer/dokumente.dart';
+import 'package:management_triangel/pages/employer/nutzerverwaltung.dart';
+import 'package:management_triangel/pages/employer/neuernutzer.dart';
+import 'package:management_triangel/pages/employer/systemeinstellungen.dart';
 
 
 Future<void> main() async {
@@ -37,6 +43,12 @@ class TriangelManagementMain extends StatelessWidget {
         '/documents': (BuildContext context) => const DocumentsScreen(),
         '/newdocument': (BuildContext context) => const NewDocumentScreen(),
         '/changepass': (BuildContext context) => const ChangePassScreen(),
+        '/employermenu': (BuildContext context) => const MenuEScreen(),
+        '/auswertungen': (BuildContext context) => const AuswertungenScreen(),
+        '/dokumente': (BuildContext context) => const DokumenteScreen(),
+        '/nutzerverwaltung': (BuildContext context) => const NutzerverwaltungScreen(),
+        '/neuernutzer': (BuildContext context) => const NeuerNutzerScreen(),
+        '/systemeinstellungen': (BuildContext context) => const SystemeinstellungenScreen(),
       }
     );
   }

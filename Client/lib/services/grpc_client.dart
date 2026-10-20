@@ -21,6 +21,10 @@ class GrpcClient {
   ZeiteintraegeServiceClient? _zeiteintraege;
   ZeiteintragServiceClient? _zeiteintrag;
   PasswordChangeServiceClient? _passwordChange;
+  CreateUserServiceClient? _createUser;
+  GetUsersServiceClient? _getUsers;
+  GetRolesServiceClient? _getRoles;
+  ChangeUserServiceClient? _changeUser;
 
   bool get isConnected => _channel != null;
 
@@ -48,6 +52,10 @@ class GrpcClient {
     _zeiteintraege = ZeiteintraegeServiceClient(channel);
     _zeiteintrag = ZeiteintragServiceClient(channel);
     _passwordChange = PasswordChangeServiceClient(channel);
+    _createUser = CreateUserServiceClient(channel);
+    _getUsers = GetUsersServiceClient(channel);
+    _getRoles = GetRolesServiceClient(channel);
+    _changeUser = ChangeUserServiceClient(channel);
   }
 
   Future<void> disconnect() async {
@@ -64,6 +72,10 @@ class GrpcClient {
     _zeiteintraege = null;
     _zeiteintrag = null;
     _passwordChange = null;
+    _createUser = null;
+    _getUsers = null;
+    _getRoles = null;
+    _changeUser = null;
   }
   
   void setAuthToken(String token) => _authToken = token;
@@ -139,4 +151,26 @@ class GrpcClient {
             ..oldPassword = oldPassword
             ..newPassword = newPassword,
           options: _opts());
+
+  Future<CreateUserReply> createUser(UserObjekt newUser) =>
+      _use(_createUser, 'createUser')
+          .createUser(CreateUserRequest()
+            ..newUser = newUser, options: _opts());
+
+  Future<GetUsersReply> getUsers() =>
+      _use(_getUsers, 'getUsers')
+          .getUsers(GetUsersRequest(),
+              options: _opts());
+
+  Future<GetRolesReply> getRoles() =>
+      _use(_getRoles, 'getRoles')
+          .getRoles(GetRolesRequest(),
+              options: _opts());
+
+  Future<ChangeUserReply> changeUser(UserObjekt changedUser, int forceReset) =>
+      _use(_changeUser, 'changeUser')
+          .changeUser(ChangeUserRequest()
+            ..changedUser = changedUser
+            ..forceReset = forceReset
+            , options: _opts());
 }

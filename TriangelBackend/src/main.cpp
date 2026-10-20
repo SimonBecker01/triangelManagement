@@ -1,17 +1,22 @@
-#include "database_mgr.hpp"
-#include "database_ops.hpp"
-#include "serviceimplement.hpp"
-
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
 
+#include "database_ops.hpp"
+#include "serviceimplement.hpp"
+#include "utils.hpp"
+
+
+
 
 int main() try {
-    DatabaseManager database_manager;
-    DatabaseOperator database(database_manager);
+
+
+
+
+    DatabaseOperator database(utils::load_credential("db_cred"), 20);
 
     /*
     //only for first run on dev system
@@ -25,7 +30,7 @@ int main() try {
     database.createUser(newUser, "Passwort1");
     */
 
-    triangel::auth::JwtManager jwt(services::requiredEnv("TRIANGEL_JWT_SECRET"), "triangel-backend", "triangel-client", 15 * 60);
+    triangel::auth::JwtManager jwt(utils::load_credential("jwt_secret"), "triangel-backend", "triangel-client", 15 * 60);
     
     services::AuthServiceImpl auth_service(database, jwt);
     services::DocumentConfigService docConfig_service(database, jwt);
@@ -38,10 +43,13 @@ int main() try {
     services::ZeiteintragService zeitEintra(database, jwt);
     services::PasswordChangeService passCha_service(database, jwt);
     services::CreateUserService createUser_service(database, jwt);
+    services::GetUsersService getUsers_service(database, jwt);
+    services::GetRolesService getRoles_service(database, jwt);
+    services::ChangeUserService changeUser_service(database, jwt);
 
     grpc::ServerBuilder builder;
 
-    builder.AddListeningPort("0.0.0.0:50051", services::tlsCredentials());
+    builder.AddListeningPort("0.0.0.0:50051", utils::tlsCredentials());
     builder.RegisterService(&auth_service);
     builder.RegisterService(&docConfig_service);
     builder.RegisterService(&docs_service);
@@ -53,6 +61,9 @@ int main() try {
     builder.RegisterService(&zeitEintra);
     builder.RegisterService(&passCha_service);
     builder.RegisterService(&createUser_service);
+    builder.RegisterService(&getUsers_service);
+    builder.RegisterService(&getRoles_service);
+    builder.RegisterService(&changeUser_service);
     auto server = builder.BuildAndStart();
     if (!server) throw std::runtime_error("gRPC server failed to start");
     std::cout << "TLS gRPC server listening on 0.0.0.0:50051\n";
