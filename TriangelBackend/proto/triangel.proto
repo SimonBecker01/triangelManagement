@@ -120,6 +120,18 @@ service SetNewBetreuungService {
   rpc SetNewBetreuung(SetNewBetreuungRequest) returns (SetNewBetreuungReply);
 }
 
+service AuswertungBetreuungService {
+  rpc AuswertungBetreuung(AuswertungBetreuungRequest) returns (AuswertungReply);
+}
+
+service AuswertungBetreuerService {
+  rpc AuswertungBetreuer(AuswertungBetreuerRequest) returns (AuswertungReply);
+}
+
+service AuswertungKlientService {
+  rpc AuswertungKlient(AuswertungKlientRequest) returns (AuswertungReply);
+}
+
 
 //types
 message Klient {
@@ -190,12 +202,24 @@ message Taetigkeit {
 }
 
 message Betreuung {
-  int64 klientId = 1;
-  int64 betreuerId = 2;
-  Datum gueltigVon = 3;
-  Datum gueltigBis = 4;
-  int64 wochenstunden = 5;
-  int64 stundensatz = 6;
+  int64 id = 1;
+  int64 klientId = 2;
+  int64 betreuerId = 3;
+  Datum gueltigVon = 4;
+  Datum gueltigBis = 5;
+  int64 wochenstunden = 6;
+  int64 stundensatz = 7;
+}
+
+message Auswertung {
+  Datum dayofentry = 1;
+  Uhrzeit anfang = 2;
+  Uhrzeit ende = 3;
+  string taetigkeit = 4;
+  string klient = 5;
+  string beschreibung = 6;
+  string betreuer = 7;
+  bool abrechenbar = 8;
 }
 
 
@@ -440,3 +464,24 @@ message SetNewBetreuungReply {
   string error_code = 1;
 }
 
+message AuswertungBetreuungRequest {
+  int64 betreuung = 1;
+  Datum monat = 2;
+  bool abrechenbar = 3;
+}
+
+message AuswertungBetreuerRequest {
+  int64 betreuer = 1;
+  Datum monat = 2;
+  bool abrechenbar = 3;
+}
+
+message AuswertungKlientRequest {
+  int64 klient = 1;
+  Datum monat = 2;
+  bool abrechenbar = 3;
+}
+
+message AuswertungReply {
+  repeated Auswertung auswertung = 1;
+}

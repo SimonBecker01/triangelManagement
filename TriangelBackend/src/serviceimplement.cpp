@@ -440,4 +440,522 @@ namespace services {
             return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
         }
     };
+
+
+    GetRechteKategorienService::GetRechteKategorienService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status GetRechteKategorienService::GetRechteKategorien(grpc::ServerContext* context, const triangel::GetRechteKategorienRequest* request, triangel::GetRechteKategorienReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::raw::RechteKategorie> rk;
+
+        int rc = database_.getRechteKategorien(principal.user_id, rk);
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < rk.size();i++){
+            
+                triangel::IdPair* eintrag = reply->add_rechtekategorien();
+
+                eintrag->set_idfirst(rk.at(i).role);
+                eintrag->set_idsecond(rk.at(i).kategorie);
+
+            }
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    GetRechteGruppeService::GetRechteGruppeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status GetRechteGruppeService::GetRechteGruppe(grpc::ServerContext* context, const triangel::GetRechteGruppeRequest* request, triangel::GetRechteGruppeReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::raw::RechteGruppe> rg;
+
+        int rc = database_.getRechteGruppe(principal.user_id, rg);
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < rg.size();i++){
+            
+                triangel::IdPair* eintrag = reply->add_rechtegruppe();
+
+                eintrag->set_idfirst(rg.at(i).role);
+                eintrag->set_idsecond(rg.at(i).gruppe);
+
+            }
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    SetRechteService::SetRechteService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status SetRechteService::SetRechte(grpc::ServerContext* context, const triangel::SetRechteRequest* request, triangel::SetRechteReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<uint64_t> k;
+        std::vector<uint64_t> g;
+
+        for(int i = 0;i < request->kategorienid().size();i++){
+            k.push_back(request->kategorienid().at(i));
+        }
+
+        for(int i = 0;i < request->gruppenid().size();i++){
+            g.push_back(request->gruppenid().at(i));
+        }
+
+        int rc = database_.setRechte(principal.user_id, request->rollenid(), k, g);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    ChangeKategorieService::ChangeKategorieService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status ChangeKategorieService::ChangeKategorie(grpc::ServerContext* context, const triangel::ChangeKategorieRequest* request, triangel::ChangeKategorieReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Kategorie kat;
+        kat.id = request->kategorie().id();
+        kat.name = request->kategorie().bezeichnung();
+
+        int rc = database_.changeKategorie(principal.user_id, kat);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    ChangeGruppeService::ChangeGruppeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status ChangeGruppeService::ChangeGruppe(grpc::ServerContext* context, const triangel::ChangeGruppeRequest* request, triangel::ChangeGruppeReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Gruppe grup;
+        grup.id = request->gruppe().id();
+        grup.name = request->gruppe().bezeichnung();
+
+        int rc = database_.changeGruppe(principal.user_id, grup);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    DeleteKategorieService::DeleteKategorieService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status DeleteKategorieService::DeleteKategorie(grpc::ServerContext* context, const triangel::DeleteKategorieRequest* request, triangel::DeleteKategorieReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Kategorie kat;
+        kat.id = request->kategorie().id();
+
+        int rc = database_.deleteKategorie(principal.user_id, kat);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    DeleteGruppeService::DeleteGruppeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status DeleteGruppeService::DeleteGruppe(grpc::ServerContext* context, const triangel::DeleteGruppeRequest* request, triangel::DeleteGruppeReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Gruppe grup;
+        grup.id = request->gruppe().id();
+
+        int rc = database_.deleteGruppe(principal.user_id, grup);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    SetNewKategorieService::SetNewKategorieService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status SetNewKategorieService::SetNewKategorie(grpc::ServerContext* context, const triangel::SetNewKategorieRequest* request, triangel::SetNewKategorieReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Kategorie kat;
+        kat.name = request->kategorie().bezeichnung();
+
+        int rc = database_.setNewKategorie(principal.user_id, kat);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    SetNewGruppeService::SetNewGruppeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status SetNewGruppeService::SetNewGruppe(grpc::ServerContext* context, const triangel::SetNewGruppeRequest* request, triangel::SetNewGruppeReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Gruppe grup;
+        grup.name = request->gruppe().bezeichnung();
+
+        int rc = database_.setNewGruppe(principal.user_id, grup);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    ChangeTaetigkeitService::ChangeTaetigkeitService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status ChangeTaetigkeitService::ChangeTaetigkeit(grpc::ServerContext* context, const triangel::ChangeTaetigkeitRequest* request, triangel::ChangeTaetigkeitReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Taetigkeit taet;
+        taet.name = request->taetigkeit().bezeichnung();
+        taet.abrechenbar = request->taetigkeit().abrechenbar();
+        taet.buchbar = request->taetigkeit().buchbar();
+
+        int rc = database_.changeTaetigkeit(principal.user_id, taet);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    DeleteTaetigkeitService::DeleteTaetigkeitService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status DeleteTaetigkeitService::DeleteTaetigkeit(grpc::ServerContext* context, const triangel::DeleteTaetigkeitRequest* request, triangel::DeleteTaetigkeitReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Taetigkeit taet;
+        taet.id = request->taetigkeitid();
+
+
+        int rc = database_.deleteTaetigkeit(principal.user_id, taet);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    SetNewTaetigkeitService::SetNewTaetigkeitService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status SetNewTaetigkeitService::SetNewTaetigkeit(grpc::ServerContext* context, const triangel::SetNewTaetigkeitRequest* request, triangel::SetNewTaetigkeitReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Taetigkeit taet;
+        taet.name = request->taetigkeit().bezeichnung();
+        taet.abrechenbar = request->taetigkeit().abrechenbar();
+        taet.buchbar = request->taetigkeit().buchbar();
+
+
+        int rc = database_.setNewTaetigkeit(principal.user_id, taet);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    GetBetreuungenService::GetBetreuungenService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status GetBetreuungenService::GetBetreuungen(grpc::ServerContext* context, const triangel::GetBetreuungenRequest* request, triangel::GetBetreuungenReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::raw::Betreuung> betreuungen;
+
+        int rc = database_.getBetreuungen(principal.user_id, betreuungen);
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < betreuungen.size();i++){
+            
+                triangel::Betreuung* eintrag = reply->add_betreuungen();
+
+                eintrag->set_id(betreuungen.at(i).id);
+                eintrag->set_betreuerid(betreuungen.at(i).betreuer);
+                eintrag->set_klientid(betreuungen.at(i).klient);
+                eintrag->set_stundensatz(betreuungen.at(i).stundensatz);
+                eintrag->set_wochenstunden(betreuungen.at(i).wochenstunden);
+
+
+                eintrag->mutable_gueltigvon()->set_year(std::stoi(betreuungen.at(i).gueltigVon.substr(0, 4)));
+                eintrag->mutable_gueltigvon()->set_month(std::stoi(betreuungen.at(i).gueltigVon.substr(5, 2)));
+                eintrag->mutable_gueltigvon()->set_day(std::stoi(betreuungen.at(i).gueltigVon.substr(8, 2)));
+
+                eintrag->mutable_gueltigbis()->set_year(std::stoi(betreuungen.at(i).gueltigBis.substr(0, 4)));
+                eintrag->mutable_gueltigbis()->set_month(std::stoi(betreuungen.at(i).gueltigBis.substr(5, 2)));
+                eintrag->mutable_gueltigbis()->set_day(std::stoi(betreuungen.at(i).gueltigBis.substr(8, 2)));
+
+            }
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    EndBetreuungService::EndBetreuungService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status EndBetreuungService::EndBetreuung(grpc::ServerContext* context, const triangel::EndBetreuungRequest* request, triangel::EndBetreuungReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+
+        int rc = database_.endBetreuung(principal.user_id, request->betreuungid());
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    SetNewBetreuungService::SetNewBetreuungService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status SetNewBetreuungService::SetNewBetreuung(grpc::ServerContext* context, const triangel::SetNewBetreuungRequest* request, triangel::SetNewBetreuungReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Betreuung betreuung;
+
+        betreuung.betreuer = request->betreuung().betreuerid();
+        betreuung.klient = request->betreuung().klientid();
+        betreuung.gueltigVon = std::to_string(request->betreuung().gueltigvon().year()) + "-" + std::to_string(request->betreuung().gueltigvon().month()) + "-" + std::to_string(request->betreuung().gueltigvon().day());
+        betreuung.gueltigBis = std::to_string(request->betreuung().gueltigbis().year()) + "-" + std::to_string(request->betreuung().gueltigbis().month()) + "-" + std::to_string(request->betreuung().gueltigbis().day());
+        betreuung.stundensatz = request->betreuung().stundensatz();
+        betreuung.wochenstunden = request->betreuung().wochenstunden();
+
+        int rc = database_.setNewBetreuung(principal.user_id, betreuung);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    AuswertungBetreuungService::AuswertungBetreuungService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status AuswertungBetreuungService::AuswertungBetreuung(grpc::ServerContext* context, const triangel::AuswertungBetreuungRequest* request, triangel::AuswertungReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::resolved::Zeiterfassung> eintraege;
+
+        int rc = database_.getAuswertungBetreuung(principal.user_id, request->betreuung(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()), request->abrechenbar(), eintraege);
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < eintraege.size();i++){
+            
+                triangel::Auswertung* eintrag = reply->add_auswertung();
+
+                
+                eintrag->mutable_dayofentry()->set_year(std::stoi(eintraege.at(i).von.substr(0, 4)));
+                eintrag->mutable_dayofentry()->set_month(std::stoi(eintraege.at(i).von.substr(5, 2)));
+                eintrag->mutable_dayofentry()->set_day(std::stoi(eintraege.at(i).von.substr(8, 2)));
+
+                eintrag->mutable_anfang()->set_hour(std::stoi(eintraege.at(i).von.substr(11, 2)));
+                eintrag->mutable_anfang()->set_minute(std::stoi(eintraege.at(i).von.substr(14, 2)));
+
+                eintrag->mutable_ende()->set_hour(std::stoi(eintraege.at(i).bis.substr(11, 2)));
+                eintrag->mutable_ende()->set_minute(std::stoi(eintraege.at(i).bis.substr(14, 2)));
+
+                eintrag->set_taetigkeit(eintraege.at(i).taetigkeitName);
+                eintrag->set_betreuer(eintraege.at(i).betreuerName);
+                eintrag->set_klient(eintraege.at(i).klientName);
+                eintrag->set_beschreibung(eintraege.at(i).beschreibung);
+                eintrag->set_abrechenbar(eintraege.at(i).istAbrechenbar);
+
+            }
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    AuswertungBetreuerService::AuswertungBetreuerService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status AuswertungBetreuerService::AuswertungBetreuer(grpc::ServerContext* context, const triangel::AuswertungBetreuerRequest* request, triangel::AuswertungReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::resolved::Zeiterfassung> eintraege;
+
+
+        int rc = database_.getAuswertungBetreuer(principal.user_id, request->betreuer(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()), request->abrechenbar(), eintraege);
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < eintraege.size();i++){
+            
+                triangel::Auswertung* eintrag = reply->add_auswertung();
+
+                
+                eintrag->mutable_dayofentry()->set_year(std::stoi(eintraege.at(i).von.substr(0, 4)));
+                eintrag->mutable_dayofentry()->set_month(std::stoi(eintraege.at(i).von.substr(5, 2)));
+                eintrag->mutable_dayofentry()->set_day(std::stoi(eintraege.at(i).von.substr(8, 2)));
+
+                eintrag->mutable_anfang()->set_hour(std::stoi(eintraege.at(i).von.substr(11, 2)));
+                eintrag->mutable_anfang()->set_minute(std::stoi(eintraege.at(i).von.substr(14, 2)));
+
+                eintrag->mutable_ende()->set_hour(std::stoi(eintraege.at(i).bis.substr(11, 2)));
+                eintrag->mutable_ende()->set_minute(std::stoi(eintraege.at(i).bis.substr(14, 2)));
+
+                eintrag->set_taetigkeit(eintraege.at(i).taetigkeitName);
+                eintrag->set_betreuer(eintraege.at(i).betreuerName);
+                eintrag->set_klient(eintraege.at(i).klientName);
+                eintrag->set_beschreibung(eintraege.at(i).beschreibung);
+                eintrag->set_abrechenbar(eintraege.at(i).istAbrechenbar);
+
+            }
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    AuswertungKlientService::AuswertungKlientService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status AuswertungKlientService::AuswertungKlient(grpc::ServerContext* context, const triangel::AuswertungKlientRequest* request, triangel::AuswertungReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::resolved::Zeiterfassung> eintraege;
+
+
+        int rc = database_.getAuswertungKlient(principal.user_id, request->klient(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()), request->abrechenbar(), eintraege);
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < eintraege.size();i++){
+            
+                triangel::Auswertung* eintrag = reply->add_auswertung();
+
+                
+                eintrag->mutable_dayofentry()->set_year(std::stoi(eintraege.at(i).von.substr(0, 4)));
+                eintrag->mutable_dayofentry()->set_month(std::stoi(eintraege.at(i).von.substr(5, 2)));
+                eintrag->mutable_dayofentry()->set_day(std::stoi(eintraege.at(i).von.substr(8, 2)));
+
+                eintrag->mutable_anfang()->set_hour(std::stoi(eintraege.at(i).von.substr(11, 2)));
+                eintrag->mutable_anfang()->set_minute(std::stoi(eintraege.at(i).von.substr(14, 2)));
+
+                eintrag->mutable_ende()->set_hour(std::stoi(eintraege.at(i).bis.substr(11, 2)));
+                eintrag->mutable_ende()->set_minute(std::stoi(eintraege.at(i).bis.substr(14, 2)));
+
+                eintrag->set_taetigkeit(eintraege.at(i).taetigkeitName);
+                eintrag->set_betreuer(eintraege.at(i).betreuerName);
+                eintrag->set_klient(eintraege.at(i).klientName);
+                eintrag->set_beschreibung(eintraege.at(i).beschreibung);
+                eintrag->set_abrechenbar(eintraege.at(i).istAbrechenbar);
+
+            }
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+	
+	
 }

@@ -26,7 +26,7 @@ namespace db::raw {
 
     struct Betreuung {
         uint64_t id;
-        uint64_t betreuuer;
+        uint64_t betreuer;
         uint64_t klient;
         std::string gueltigVon;
         std::string gueltigBis;

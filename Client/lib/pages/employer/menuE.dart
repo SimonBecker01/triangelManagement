@@ -74,6 +74,16 @@ class MenuEScreen extends StatelessWidget {
                   flex: 2,
                   child: FilledButton(
                     onPressed: () {
+                      Navigator.of(context).pushNamed('/rechteverwaltung');
+                    },
+                    child: const Text('Rechteverwaltung'),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    onPressed: () {
                       Navigator.of(context).pushNamed('/systemeinstellungen');
                     },
                     child: const Text('Systemeinstellungen'),
@@ -127,6 +137,16 @@ class MenuEScreen extends StatelessWidget {
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
                   child: Text('Nutzerverwaltung'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed('/rechteverwaltung');
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Rechteverwaltung'),
                 ),
               ),
               const SizedBox(height: 16),

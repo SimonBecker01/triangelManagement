@@ -51,8 +51,9 @@ public:
     int getBetreuungen(const int64_t, std::vector<db::raw::Betreuung>&);
     int endBetreuung(const int64_t, const int64_t);
     int setNewBetreuung(const int64_t, const db::raw::Betreuung&);
-    int getAuswertungBetreuung(const int64_t, const int64_t, const std::string);
-    int getAuswertungBetreuer(const int64_t, const int64_t, const std::string);
+    int getAuswertungBetreuung(const int64_t, const int64_t, const std::string, const bool, std::vector<db::resolved::Zeiterfassung>&);
+    int getAuswertungBetreuer(const int64_t, const int64_t, const std::string, const bool, std::vector<db::resolved::Zeiterfassung>&);
+    int getAuswertungKlient(const int64_t, const int64_t, const std::string, const bool, std::vector<db::resolved::Zeiterfassung>&);
     
 
 

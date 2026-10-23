@@ -12,6 +12,11 @@ import 'package:management_triangel/pages/employer/auswertungen.dart';
 import 'package:management_triangel/pages/employer/dokumente.dart';
 import 'package:management_triangel/pages/employer/nutzerverwaltung.dart';
 import 'package:management_triangel/pages/employer/neuernutzer.dart';
+import 'package:management_triangel/pages/employer/rechteverwaltung.dart';
+import 'package:management_triangel/pages/employer/rollen.dart';
+import 'package:management_triangel/pages/employer/kategorien.dart';
+import 'package:management_triangel/pages/employer/gruppen.dart';
+import 'package:management_triangel/pages/employer/taetigkeiten.dart';
 import 'package:management_triangel/pages/employer/systemeinstellungen.dart';
 
 
@@ -48,6 +53,11 @@ class TriangelManagementMain extends StatelessWidget {
         '/dokumente': (BuildContext context) => const DokumenteScreen(),
         '/nutzerverwaltung': (BuildContext context) => const NutzerverwaltungScreen(),
         '/neuernutzer': (BuildContext context) => const NeuerNutzerScreen(),
+        '/rechteverwaltung': (BuildContext context) => const RechteverwaltungScreen(),
+        '/rollen': (BuildContext context) => const RollenScreen(),
+        '/kategorien': (BuildContext context) => const KategorienScreen(),
+        '/gruppen': (BuildContext context) => const GruppenScreen(),
+        '/taetigkeiten': (BuildContext context) => const TaetigkeitenScreen(),
         '/systemeinstellungen': (BuildContext context) => const SystemeinstellungenScreen(),
       }
     );

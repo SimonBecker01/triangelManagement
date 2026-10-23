@@ -26,7 +26,7 @@ struct Klient {
 
 struct Betreuung {
     uint64_t id;
-    std::string betreuuerName;
+    std::string betreuerName;
     std::string klientName;
     std::string gueltigVon;
     std::string gueltigBis;
@@ -75,12 +75,13 @@ struct VariablenWert {
 struct Zeiterfassung {
     uint64_t id;
     uint64_t betreuungId;
-    std::string betreuuerName;
+    std::string betreuerName;
     std::string klientName;
     std::string taetigkeitName;
     bool istAbrechenbar;
     std::string von;
     std::string bis;
+    std::string beschreibung;
 };
 
 } // namespace db::resolved

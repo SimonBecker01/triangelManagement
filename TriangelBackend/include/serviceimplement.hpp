@@ -199,4 +199,22 @@ namespace services {
             grpc::Status SetNewBetreuung(grpc::ServerContext*, const triangel::SetNewBetreuungRequest*, triangel::SetNewBetreuungReply*) override;
         private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
     };
+    class AuswertungBetreuungService final : public triangel::AuswertungBetreuungService::Service {
+        public:
+            AuswertungBetreuungService(DatabaseOperator&, const triangel::auth::JwtManager&);
+            grpc::Status AuswertungBetreuung(grpc::ServerContext*, const triangel::AuswertungBetreuungRequest*, triangel::AuswertungReply*) override;
+        private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
+    };
+    class AuswertungBetreuerService final : public triangel::AuswertungBetreuerService::Service {
+        public:
+            AuswertungBetreuerService(DatabaseOperator&, const triangel::auth::JwtManager&);
+            grpc::Status AuswertungBetreuer(grpc::ServerContext*, const triangel::AuswertungBetreuerRequest*, triangel::AuswertungReply*) override;
+        private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
+    };
+    class AuswertungKlientService final : public triangel::AuswertungKlientService::Service {
+        public:
+            AuswertungKlientService(DatabaseOperator&, const triangel::auth::JwtManager&);
+            grpc::Status AuswertungKlient(grpc::ServerContext*, const triangel::AuswertungKlientRequest*, triangel::AuswertungReply*) override;
+        private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
+    };
 }

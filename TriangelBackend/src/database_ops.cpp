@@ -32,7 +32,7 @@ int DatabaseOperator::createUser(const db::raw::User& user, const std::string& p
 
             try {
                 mysqlx::SqlStatement query = session.sql(
-                    "INSERT INTO Users(Login, last_name, first_name, email, salt, hash, role)"
+                    "INSERT INTO Users(Login, Nachname, Vorname, Email, salt, hash, Rolle)"
                     "VALUES (?, ?, ?, ?, ?, ?, ?)"
                 );
 
@@ -82,7 +82,7 @@ int DatabaseOperator::getKlienten(const int64_t user_id, std::vector<db::raw::Kl
         mysqlx::SqlResult result;
         
         mysqlx::SqlStatement query = session.sql(
-            "SELECT id, last_name, first_name "
+            "SELECT id, Nachname, Vorname "
             "FROM Klienten WHERE id IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?)"
         );
         result = query.bind(user_id).execute();
@@ -118,8 +118,8 @@ int DatabaseOperator::getSettingsValue(const std::string& name, std::string& val
         mysqlx::SqlResult result;
 
         mysqlx::SqlStatement query = session.sql(
-            "SELECT value "
-            "FROM Settings WHERE name = ?"
+            "SELECT Wert "
+            "FROM Systemeinstellungen WHERE Name = ?"
         );
         result = query.bind(name).execute();
 
@@ -145,16 +145,26 @@ int DatabaseOperator::getSettingsValue(const std::string& name, std::string& val
 
 int DatabaseOperator::getGruppen(const int64_t id, std::vector<db::raw::Gruppe> & gruppen)
 {
+    int rc = checkGF(id);
+
     mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
-
-        mysqlx::SqlStatement query = session.sql(
-            "SELECT id, Name "
-            "FROM Gruppe WHERE id IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?))"
-        );
-        result = query.bind(id).execute();
+        
+        if(rc != 0){
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Name "
+                "FROM Gruppe WHERE id IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT Rolle FROM Users WHERE id = ?)) "
+            );
+            result = query.bind(id).execute();
+        }else{
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Name "
+                "FROM Gruppe "
+            );
+            result = query.execute();
+        }
 
         for(mysqlx::Row row : result) {
             db::raw::Gruppe nextGruppe;
@@ -177,16 +187,26 @@ int DatabaseOperator::getGruppen(const int64_t id, std::vector<db::raw::Gruppe> 
 
 int DatabaseOperator::getKategorien(const int64_t id, std::vector<db::raw::Kategorie> & kategorien)
 {
+    int rc = checkGF(id);
+
     mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
-
-        mysqlx::SqlStatement query = session.sql(
-            "SELECT id, Name "
-            "FROM Kategorie WHERE id IN (SELECT Kategorie FROM RechteKategorie WHERE Rolle = (SELECT role FROM Users WHERE id = ?))"
-        );
-        result = query.bind(id).execute();
+        
+        if(rc != 0){
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Name "
+                "FROM Kategorie WHERE id IN (SELECT Kategorie FROM RechteKategorie WHERE Rolle = (SELECT Rolle FROM Users WHERE id = ?)) "
+            );
+            result = query.bind(id).execute();
+        }else{
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Name "
+                "FROM Kategorie "
+            );
+            result = query.execute();
+        }
 
 
         for(mysqlx::Row row : result) {
@@ -217,10 +237,10 @@ int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient,
         mysqlx::SqlResult result;
 
         mysqlx::SqlStatement query = session.sql(
-            "SELECT d.Name, u.login, d.Gruppe, g.Name, d.id "
-            "FROM Dokumente d JOIN Users u on d.Author = u.id JOIN Gruppe g ON d.Gruppe = g.id "
-            "WHERE EXISTS (SELECT * FROM RechteKategorie rk JOIN Kategorienzuordnung kz ON kz.Kategorie = rk.Kategorie WHERE kz.Dokument = d.id AND rk.Rolle = (SELECT role FROM Users WHERE id = ?))"
-            "AND d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "SELECT d.Name, u.Login, d.Gruppe, g.Name, d.id "
+            "FROM Dokumente d JOIN Users u on d.Autor = u.id JOIN Gruppe g ON d.Gruppe = g.id "
+            "WHERE EXISTS (SELECT * FROM RechteKategorie rk JOIN Kategorienzuordnung kz ON kz.Kategorie = rk.Kategorie WHERE kz.Dokument = d.id AND rk.Rolle = (SELECT Rolle FROM Users WHERE id = ?))"
+            "AND d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT Rolle FROM Users WHERE id = ?)) "
             "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
             "AND d.Klient = ? "
         );
@@ -241,7 +261,7 @@ int DatabaseOperator::getDokumenteAuthor(const int64_t id, const int64_t klient,
             mysqlx::SqlStatement queryInner = session.sql(
             "SELECT k.Name, k.id "
             "FROM Kategorie k "
-            "WHERE EXISTS (SELECT * FROM RechteKategorie rk WHERE rk.Kategorie = k.id AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "WHERE EXISTS (SELECT * FROM RechteKategorie rk WHERE rk.Kategorie = k.id AND rk.Rolle = (SELECT Rolle FROM Users WHERE id = ?)) "
             "AND EXISTS (SELECT * FROM Kategorienzuordnung kz WHERE kz.Dokument = ?) "
             );
             resultInner = queryInner.bind(id).bind(row[4]).execute();
@@ -283,13 +303,13 @@ int DatabaseOperator::getDokumentFile(const int64_t id, const db::raw::Dokument 
         mysqlx::SqlStatement query = session.sql(
             "SELECT d.Datei "
             "FROM Dokumente d "
-            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT Rolle FROM Users WHERE id = ?)) "
             "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
             "AND d.Klient = ? "
             "AND d.Gruppe = ? "
             "AND EXISTS (SELECT * FROM Kategorienzuordnung kz WHERE kz.Dokument = d.id AND kz.Kategorie IN ( "
             + KatVektor +
-            " ) AND EXISTS (SELECT * FROM RechteKategorie rk WHERE rk.Kategorie = kz.Kategorie AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) )"
+            " ) AND EXISTS (SELECT * FROM RechteKategorie rk WHERE rk.Kategorie = kz.Kategorie AND rk.Rolle = (SELECT Rolle FROM Users WHERE id = ?)) )"
             "AND d.Name = ? "
         );
 
@@ -330,7 +350,7 @@ int DatabaseOperator::deleteDokumentFile(const int64_t id, const db::raw::Dokume
         mysqlx::SqlStatement query = session.sql(
             "SELECT d.Datei "
             "FROM Dokumente d "
-            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT Rolle FROM Users WHERE id = ?)) "
             "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
             "AND d.Klient = ? "
             "AND d.Gruppe = ? "
@@ -338,7 +358,7 @@ int DatabaseOperator::deleteDokumentFile(const int64_t id, const db::raw::Dokume
                 "WHERE kz.Dokument = d.id "
                 "AND EXISTS (SELECT * FROM RechteKategorie rk "
                     "WHERE rk.Kategorie = kz.Kategorie "
-                    "AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) )"
+                    "AND rk.Rolle = (SELECT Rolle FROM Users WHERE id = ?)) )"
             "AND d.Name = ? "
         );
 
@@ -356,7 +376,7 @@ int DatabaseOperator::deleteDokumentFile(const int64_t id, const db::raw::Dokume
         query = session.sql(
             "DELETE "
             "FROM Dokumente d "
-            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT role FROM Users WHERE id = ?)) "
+            "WHERE d.Gruppe IN (SELECT Gruppe FROM RechteGruppe WHERE Rolle = (SELECT Rolle FROM Users WHERE id = ?)) "
             "AND d.Klient IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
             "AND d.Klient = ? "
             "AND d.Gruppe = ? "
@@ -364,7 +384,7 @@ int DatabaseOperator::deleteDokumentFile(const int64_t id, const db::raw::Dokume
                 "WHERE kz.Dokument = d.id "
                 "AND EXISTS (SELECT * FROM RechteKategorie rk "
                     "WHERE rk.Kategorie = kz.Kategorie "
-                    "AND rk.Rolle = (SELECT role FROM Users WHERE id = ?)) )"
+                    "AND rk.Rolle = (SELECT Rolle FROM Users WHERE id = ?)) )"
             "AND d.Name = ? "
         );
 
@@ -399,8 +419,8 @@ int DatabaseOperator::setNewDokumentFile(const int64_t id, const db::raw::Dokume
             "SELECT u.id "
             "FROM Users u "
             "WHERE u.id = ? "
-            "AND EXISTS(SELECT Gruppe FROM RechteGruppe WHERE Rolle = u.role AND Gruppe = ?) "
-            "AND EXISTS(SELECT Kategorie FROM RechteKategorie WHERE Rolle = u.role AND Kategorie IN ( " + KatVektor + " )) "
+            "AND EXISTS(SELECT Gruppe FROM RechteGruppe WHERE Rolle = u.Rolle AND Gruppe = ?) "
+            "AND EXISTS(SELECT Kategorie FROM RechteKategorie WHERE Rolle = u.Rolle AND Kategorie IN ( " + KatVektor + " )) "
             "AND EXISTS(SELECT Klient FROM Betreuungen WHERE Betreuer = u.id AND Klient = ?) "
             "AND NOT EXISTS(SELECT id FROM Dokumente WHERE Gruppe = ? AND Klient = ? AND Name = ?) "
         );
@@ -424,10 +444,9 @@ int DatabaseOperator::setNewDokumentFile(const int64_t id, const db::raw::Dokume
         filepath = ("/documents/" + std::to_string(dokument.klient) + "-" + std::to_string(dokument.gruppe) + "-" + dokument.name);
         
         query = session.sql(
-            "INSERT INTO Dokumente (Name, Datei, Klient, Gruppe, Author) "
+            "INSERT INTO Dokumente (Name, Datei, Klient, Gruppe, Autor) "
             "VALUES(?, ?, ?, ?, ?) "
         );
-            std::cerr << "FICK DICH!5" << std::endl;
         result = query.bind(dokument.name).bind(filepath).bind(dokument.klient).bind(dokument.gruppe).bind(id).execute();
 
         result.getWarningsCount();
@@ -536,13 +555,13 @@ int DatabaseOperator::getZeiteintraege(const int64_t id, const std::string vonDt
         mysqlx::SqlResult result;
 
         mysqlx::SqlStatement query = session.sql(
-            "SELECT b.klient, z.taetigkeit, DATE_FORMAT(z.von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, z.id "
+            "SELECT b.Klient, z.Taetigkeit, DATE_FORMAT(z.Von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.Bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, z.id "
             "FROM Betreuungen b "
             "JOIN Zeiterfassung z "
             "ON z.Betreuung = b.id "
             "WHERE b.Betreuer = ? "
-            "AND z.von >= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
-            "AND z.bis <= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND z.Von >= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND z.Bis <= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
         );
 
         result = query.bind(id).bind(vonDt).bind(bisDt).execute();
@@ -601,8 +620,8 @@ int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfass
             "JOIN Zeiterfassung z "
             "ON z.Betreuung = b.id "
             "WHERE b.Betreuer = ? "
-            "AND z.bis > STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
-            "AND z.von < STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND z.Bis > STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND z.Von < STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
         );
         result = query.bind(id).bind(neuerEintrag.von).bind(neuerEintrag.bis).execute();
 
@@ -614,7 +633,7 @@ int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfass
         }
 
         query = session.sql(
-            "INSERT INTO Zeiterfassung (Betreuung, Taetigkeit, von, bis, Beschreibung) "
+            "INSERT INTO Zeiterfassung (Betreuung, Taetigkeit, Von, Bis, Beschreibung) "
             "VALUES (?, ?, STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), ?) "
         );
         result = query.bind(betreuungId).bind(neuerEintrag.taetigkeit).bind(neuerEintrag.von).bind(neuerEintrag.bis).bind(neuerEintrag.beschreibung).execute();
@@ -659,8 +678,8 @@ int DatabaseOperator::changeZeiteintrag(const int64_t id, const db::raw::Zeiterf
             "JOIN Zeiterfassung z "
             "ON z.Betreuung = b.id "
             "WHERE b.Betreuer = ? "
-            "AND z.bis > STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
-            "AND z.von < STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND z.Bis > STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND z.Von < STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
             "AND z.id != ? "
         );
         result = query.bind(id).bind(neuerEintrag.von).bind(neuerEintrag.bis).bind(neuerEintrag.id).execute();
@@ -673,7 +692,7 @@ int DatabaseOperator::changeZeiteintrag(const int64_t id, const db::raw::Zeiterf
         }
 
         query = session.sql(
-            "UPDATE Zeiterfassung  SET Betreuung = ?, Taetigkeit = ?, von = ?, bis = ?, Beschreibung = ? "
+            "UPDATE Zeiterfassung  SET Betreuung = ?, Taetigkeit = ?, Von = ?, Bis = ?, Beschreibung = ? "
             "WHERE id = ? "
         );
         result = query.bind(betreuungId).bind(neuerEintrag.taetigkeit).bind(neuerEintrag.von).bind(neuerEintrag.bis).bind(neuerEintrag.beschreibung).bind(neuerEintrag.id).execute();
@@ -786,7 +805,7 @@ int DatabaseOperator::getUsersList(const int64_t id, std::vector<db::raw::User> 
         try {
             mysqlx::Session session = m_dbClient.getSession();
             mysqlx::SqlStatement query = session.sql(
-                "SELECT id, Login, last_name, first_name, email, role "
+                "SELECT id, Login, Nachname, Vorname, Email, Rolle "
                 "FROM Users "
             );
             mysqlx::SqlResult result = query.execute();
@@ -866,13 +885,13 @@ int DatabaseOperator::changeUser(const int64_t id, const db::raw::User & changed
             if(changedUser.forceReset){
                 query = session.sql(
                     "UPDATE Users "
-                    "SET Login = ?, last_name = ?, first_name = ?, email = ?, role = ?, forceResetPass = 1 "
+                    "SET Login = ?, Nachname = ?, Vorname = ?, Email = ?, Rolle = ?, forceResetPass = 1 "
                     "WHERE id = ? "
                 );
             }else{
                 query = session.sql(
                     "UPDATE Users "
-                    "SET Login = ?, last_name = ?, first_name = ?, email = ?, role = ? "
+                    "SET Login = ?, Nachname = ?, Vorname = ?, Email = ?, Rolle = ? "
                     "WHERE id = ? "
                 );
             }
@@ -1427,7 +1446,7 @@ int DatabaseOperator::getBetreuungen(const int64_t id, std::vector<db::raw::Betr
                 db::raw::Betreuung nextEintrag;
 
                 nextEintrag.id = row[0];
-                nextEintrag.betreuuer = row[1];
+                nextEintrag.betreuer = row[1];
                 nextEintrag.klient = row[2];
                 nextEintrag.gueltigVon = std::string(row[3]);
                 nextEintrag.gueltigBis = std::string(row[4]);
@@ -1493,7 +1512,7 @@ int DatabaseOperator::setNewBetreuung(const int64_t id, const db::raw::Betreuung
                 "INSERT INTO Betreuungen (Betreuer, Klient, GueltigBis, Stundensatz, Wochenstunden) "
                 "VALUES (?, ?, STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), ?, ?) "
             );
-            mysqlx::SqlResult result = query.bind(betreuung.betreuuer).bind(betreuung.klient).bind(betreuung.gueltigVon).bind(betreuung.gueltigBis).bind(betreuung.stundensatz).bind(betreuung.wochenstunden).execute();
+            mysqlx::SqlResult result = query.bind(betreuung.betreuer).bind(betreuung.klient).bind(betreuung.gueltigVon).bind(betreuung.gueltigBis).bind(betreuung.stundensatz).bind(betreuung.wochenstunden).execute();
 
             return 0;
 
@@ -1507,7 +1526,7 @@ int DatabaseOperator::setNewBetreuung(const int64_t id, const db::raw::Betreuung
 }
 
 
-int getAuswertungBetreuung(const int64_t, const int64_t, const std::string)
+int DatabaseOperator::getAuswertungBetreuung(const int64_t id, const int64_t betreuungId, const std::string monat, const bool excludeNA, std::vector<db::resolved::Zeiterfassung>& zeiteintraege)
 {
     
     int rc = checkGF(id);
@@ -1519,27 +1538,36 @@ int getAuswertungBetreuung(const int64_t, const int64_t, const std::string)
 
             mysqlx::SqlResult result;
 
+            std::string excludeNAString = (excludeNA)? "AND t.Abrechenbar = true " : "";
+
             mysqlx::SqlStatement query = session.sql(
-                "SELECT b.klient, z.taetigkeit, DATE_FORMAT(z.von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, z.id "
-                "FROM Betreuungen b "
-                "JOIN Zeiterfassung z "
+                "SELECT u.Vorname, u.Nachname, t.Name, k.Vorname, k.Nachname, DATE_FORMAT(z.von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, t.Abrechenbar "
+                "FROM Zeiterfassung z "
+                "JOIN Betreuungen b "
                 "ON z.Betreuung = b.id "
-                "WHERE b.Betreuer = ? "
-                "AND z.von >= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
-                "AND z.bis <= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+                "JOIN Taetigkeiten t "
+                "ON t.id = z.Taetigkeit "
+                "JOIN Users u "
+                "ON u.id = b.Betreuer "
+                "JOIN Klienten k "
+                "ON k.id = b.Klient "
+                "WHERE b.id = ? "
+                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m') AND STR_TO_DATE(?,'%Y-%m') + INTERVAL 1 MONTH "
+                + excludeNAString
             );
 
-            result = query.bind(id).bind(vonDt).bind(bisDt).execute();
+            result = query.bind(betreuungId).bind(monat).bind(monat).execute();
 
             for(mysqlx::Row row : result) {
-                db::raw::Zeiterfassung nextEintrag;
+                db::resolved::Zeiterfassung nextEintrag;
 
-                nextEintrag.klient = row[0];
-                nextEintrag.taetigkeit = row[1];
-                nextEintrag.von = std::string(row[2]);
-                nextEintrag.bis = std::string(row[3]);
-                nextEintrag.beschreibung = std::string(row[4]);
-                nextEintrag.id = row[5];
+                nextEintrag.betreuerName = std::string(row[0]) + " " + std::string(row[1]);
+                nextEintrag.taetigkeitName = std::string(row[2]);
+                nextEintrag.klientName = std::string(row[3]) + " " + std::string(row[4]);
+                nextEintrag.von = std::string(row[5]);
+                nextEintrag.bis = std::string(row[6]);
+                nextEintrag.beschreibung = std::string(row[7]);
+                nextEintrag.istAbrechenbar = static_cast<int>(row[8]);
 
 
                 zeiteintraege.push_back(nextEintrag);
@@ -1556,45 +1584,116 @@ int getAuswertungBetreuung(const int64_t, const int64_t, const std::string)
     return -1;
 }
 
-int getAuswertungBetreuer(const int64_t, const int64_t, const std::string)
+int DatabaseOperator::getAuswertungBetreuer(const int64_t id, const int64_t betreuerId, const std::string monat, const bool excludeNA, std::vector<db::resolved::Zeiterfassung>& zeiteintraege)
 {
     
-    mysqlx::Session session = m_dbClient.getSession();
-    try {
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+        mysqlx::Session session = m_dbClient.getSession();
+        try {
 
-        mysqlx::SqlResult result;
+            mysqlx::SqlResult result;
 
-        mysqlx::SqlStatement query = session.sql(
-            "SELECT b.klient, z.taetigkeit, DATE_FORMAT(z.von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, z.id "
-            "FROM Betreuungen b "
-            "JOIN Zeiterfassung z "
-            "ON z.Betreuung = b.id "
-            "WHERE b.Betreuer = ? "
-            "AND z.von >= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
-            "AND z.bis <= STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
-        );
+            std::string excludeNAString = (excludeNA)? "AND t.Abrechenbar = true " : "";
 
-        result = query.bind(id).bind(vonDt).bind(bisDt).execute();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT u.Vorname, u.Nachname, t.Name, k.Vorname, k.Nachname, DATE_FORMAT(z.von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, t.Abrechenbar "
+                "FROM Zeiterfassung z "
+                "JOIN Betreuungen b "
+                "ON z.Betreuung = b.id "
+                "JOIN Taetigkeiten t "
+                "ON t.id = z.Taetigkeit "
+                "JOIN Users u "
+                "ON u.id = b.Betreuer "
+                "JOIN Klienten k "
+                "ON k.id = b.Klient "
+                "WHERE u.id = ? "
+                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m') AND STR_TO_DATE(?,'%Y-%m') + INTERVAL 1 MONTH "
+                + excludeNAString
+            );
 
-        for(mysqlx::Row row : result) {
-            db::raw::Zeiterfassung nextEintrag;
+            result = query.bind(betreuerId).bind(monat).bind(monat).execute();
 
-            nextEintrag.klient = row[0];
-            nextEintrag.taetigkeit = row[1];
-            nextEintrag.von = std::string(row[2]);
-            nextEintrag.bis = std::string(row[3]);
-            nextEintrag.beschreibung = std::string(row[4]);
-            nextEintrag.id = row[5];
+            for(mysqlx::Row row : result) {
+                db::resolved::Zeiterfassung nextEintrag;
+
+                nextEintrag.betreuerName = std::string(row[0]) + " " + std::string(row[1]);
+                nextEintrag.taetigkeitName = std::string(row[2]);
+                nextEintrag.klientName = std::string(row[3]) + " " + std::string(row[4]);
+                nextEintrag.von = std::string(row[5]);
+                nextEintrag.bis = std::string(row[6]);
+                nextEintrag.beschreibung = std::string(row[7]);
+                nextEintrag.istAbrechenbar = static_cast<int>(row[8]);
 
 
-            zeiteintraege.push_back(nextEintrag);
+                zeiteintraege.push_back(nextEintrag);
+            }
+
+            return 0;
         }
-
-        return 0;
+        catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
     }
-    catch (const mysqlx::Error &err) {
-        std::cerr << "Database Query Error: " << err.what() << std::endl;
-        return 1;
+
+    return -1;
+}
+
+int DatabaseOperator::getAuswertungKlient(const int64_t id, const int64_t klientId, const std::string monat, const bool excludeNA, std::vector<db::resolved::Zeiterfassung>& zeiteintraege)
+{
+    
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+        mysqlx::Session session = m_dbClient.getSession();
+        try {
+
+            mysqlx::SqlResult result;
+
+            std::string excludeNAString = (excludeNA)? "AND t.Abrechenbar = true " : "";
+
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT u.Vorname, u.Nachname, t.Name, k.Vorname, k.Nachname, DATE_FORMAT(z.von,'%Y-%m-%d-%H-%i'), DATE_FORMAT(z.bis,'%Y-%m-%d-%H-%i'), z.Beschreibung, t.Abrechenbar "
+                "FROM Zeiterfassung z "
+                "JOIN Betreuungen b "
+                "ON z.Betreuung = b.id "
+                "JOIN Taetigkeiten t "
+                "ON t.id = z.Taetigkeit "
+                "JOIN Users u "
+                "ON u.id = b.Betreuer "
+                "JOIN Klienten k "
+                "ON k.id = b.Klient "
+                "WHERE k.id = ? "
+                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m') AND STR_TO_DATE(?,'%Y-%m') + INTERVAL 1 MONTH "
+                + excludeNAString
+            );
+
+            result = query.bind(klientId).bind(monat).bind(monat).execute();
+
+            for(mysqlx::Row row : result) {
+                db::resolved::Zeiterfassung nextEintrag;
+
+                nextEintrag.betreuerName = std::string(row[0]) + " " + std::string(row[1]);
+                nextEintrag.taetigkeitName = std::string(row[2]);
+                nextEintrag.klientName = std::string(row[3]) + " " + std::string(row[4]);
+                nextEintrag.von = std::string(row[5]);
+                nextEintrag.bis = std::string(row[6]);
+                nextEintrag.beschreibung = std::string(row[7]);
+                nextEintrag.istAbrechenbar = static_cast<int>(row[8]);
+
+                zeiteintraege.push_back(nextEintrag);
+            }
+
+            return 0;
+        }
+        catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
     }
 
     return -1;
@@ -1637,14 +1736,14 @@ int DatabaseOperator::selectUser(const std::string& login, const uint64_t& id, d
         mysqlx::SqlResult result;
         if(login.length() > 0){
             mysqlx::SqlStatement query = session.sql(
-                "SELECT id, Login, last_name, first_name, email, salt, hash, role, forceResetPass "
+                "SELECT id, Login, Nachname, Vorname, Email, salt, hash, Rolle, forceResetPass "
                 "FROM Users WHERE Login = ?"
             );
             result = query.bind(login).execute();
 
         }else{
             mysqlx::SqlStatement query = session.sql(
-                "SELECT id, Login, last_name, first_name, email, salt, hash, role, forceResetPass "
+                "SELECT id, Login, Nachname, Vorname, Email, salt, hash, Rolle, forceResetPass "
                 "FROM Users WHERE id = ?"
             );
             result = query.bind(id).execute();
@@ -1740,7 +1839,7 @@ int DatabaseOperator::checkGF(const uint64_t id)
         mysqlx::SqlResult result;
 
         mysqlx::SqlStatement query = session.sql(
-            "SELECT role "
+            "SELECT Rolle "
             "FROM Users "
             "WHERE id = ? "
         );

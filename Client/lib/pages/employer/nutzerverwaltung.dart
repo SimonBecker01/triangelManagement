@@ -28,6 +28,12 @@ class _NutzerverwaltungState extends State<NutzerverwaltungScreen>{
   
   @override
   void dispose() {
+    _loginController.dispose();
+    _lnameController.dispose();
+    _fnameController.dispose();
+    _emailController.dispose();
+    _roleController.dispose();
+    _responseController.dispose();
     super.dispose();
   }
 
