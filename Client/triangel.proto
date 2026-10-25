@@ -72,6 +72,10 @@ service SetRechteService {
   rpc SetRechte(SetRechteRequest) returns (SetRechteReply);
 }
 
+service ChangeRolleService {
+  rpc ChangeRolle(ChangeRolleRequest) returns (ChangeRolleReply);
+}
+
 service ChangeKategorieService {
   rpc ChangeKategorie(ChangeKategorieRequest) returns (ChangeKategorieReply);
 }
@@ -80,12 +84,20 @@ service ChangeGruppeService {
   rpc ChangeGruppe(ChangeGruppeRequest) returns (ChangeGruppeReply);
 }
 
+service DeleteRolleService {
+  rpc DeleteRolle(DeleteRolleRequest) returns (DeleteRolleReply);
+}
+
 service DeleteKategorieService {
   rpc DeleteKategorie(DeleteKategorieRequest) returns (DeleteKategorieReply);
 }
 
 service DeleteGruppeService {
   rpc DeleteGruppe(DeleteGruppeRequest) returns (DeleteGruppeReply);
+}
+
+service SetNewRolleService {
+  rpc SetNewRolle(SetNewRolleRequest) returns (SetNewRolleReply);
 }
 
 service SetNewKategorieService {
@@ -369,6 +381,14 @@ message SetRechteReply {
   string error_code = 1;
 }
 
+message ChangeRolleRequest {
+  IdObjekt rolle = 1;
+}
+
+message ChangeRolleReply {
+  string error_code = 1;
+}
+
 message ChangeKategorieRequest {
   IdObjekt kategorie = 1;
 }
@@ -385,6 +405,14 @@ message ChangeGruppeReply {
   string error_code = 1;
 }
 
+message DeleteRolleRequest {
+  IdObjekt rolle = 1;
+}
+
+message DeleteRolleReply {
+  string error_code = 1;
+}
+
 message DeleteKategorieRequest {
   IdObjekt kategorie = 1;
 }
@@ -398,6 +426,14 @@ message DeleteGruppeRequest {
 }
 
 message DeleteGruppeReply {
+  string error_code = 1;
+}
+
+message SetNewRolleRequest {
+  IdObjekt rolle = 1;
+}
+
+message SetNewRolleReply {
   string error_code = 1;
 }
 

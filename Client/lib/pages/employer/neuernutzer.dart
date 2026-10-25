@@ -198,6 +198,98 @@ class _NeuerNutzerState extends State<NeuerNutzerScreen>{
   
   // Blöde kleine Bildschirme...
   Widget _buildNarrowLayout(BuildContext context) {
-    return SingleChildScrollView();
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 1,
+            child: Row(
+              children: [
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _loginController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Benutzername',
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _lnameController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Nachname',
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _fnameController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Vorname',
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _emailController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Email',
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: dropDownRoles,
+                ),
+                const Spacer(flex: 1),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Row(
+              children: [
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: FilledButton(
+                    onPressed: () async {
+                      CreateUserReply resp = await globalGrpcClient.createUser(UserObjekt(loginName: _loginController.text, email: _emailController.text, fname: _fnameController.text, lname: _lnameController.text, role: rollen[roleIndex].$1));
+                      if(resp.errorCode.isEmpty){
+                        _responseController.text = "${_loginController.text} wurde erfolgreich angelegt";
+                        clearFields();
+                      }else{
+                        _responseController.text = "${_loginController.text} konnte nicht angelegt werden";
+                      }
+                    },
+                    child: const Text('Nutzer anlegen'),
+                  ),
+                ),
+                const Spacer(flex: 1),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Center(child: TextField(controller: _responseController, enabled: false,)),
+          ),
+        ]
+      )
+    );
   }
 }

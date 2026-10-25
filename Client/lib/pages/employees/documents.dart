@@ -108,7 +108,7 @@ class _DocumentsState extends State<DocumentsScreen>{
           selectedDocumentList.add(documentList[i]);
         }
       }
-       _authorController.text = (selectedDocumentList.isNotEmpty) ? '${"Author: "} ${selectedDocumentList.elementAt(selectedDocument).$5}' : '';
+       _authorController.text = (selectedDocumentList.isNotEmpty) ? '${"Autor: "} ${selectedDocumentList.elementAt(selectedDocument).$5}' : '';
     });
   }
 
@@ -148,7 +148,7 @@ class _DocumentsState extends State<DocumentsScreen>{
             setState(() {
               selectedDocument = index;
               _authorController.text =
-                  '${"Author: "} ${selectedDocumentList.elementAt(selectedDocument).$5}';
+                  '${"Autor: "} ${selectedDocumentList.elementAt(selectedDocument).$5}';
             });
           },
         );

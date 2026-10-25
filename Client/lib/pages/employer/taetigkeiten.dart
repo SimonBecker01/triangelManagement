@@ -216,6 +216,18 @@ class _TaetigkeitenState extends State<TaetigkeitenScreen>{
             ),
           ),
           const Spacer(flex: 2),
+          Row(
+            children: [
+              const Spacer(flex: 2),
+              Text("Abrechenbar:"),
+              Checkbox(value: _abrechenbar, onChanged: (bool? value) {setState(() { _abrechenbar = value!;});}),
+              const Spacer(flex: 2),
+              Text("Buchbar:"),
+              Checkbox(value: _buchbar, onChanged: (bool? value) {setState(() { _buchbar = value!;});}),
+              const Spacer(flex: 2),
+            ],
+          ),
+          const Spacer(flex: 2),
           Expanded(
             flex: 3,
             child: FilledButton(

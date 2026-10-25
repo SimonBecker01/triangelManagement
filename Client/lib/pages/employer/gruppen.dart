@@ -170,7 +170,7 @@ class _GruppenState extends State<GruppenScreen>{
   }
 
   Widget _buildNarrowLayout(BuildContext context) {
-    return Center(
+    return SingleChildScrollView(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.center,

@@ -63,6 +63,8 @@ List<(int, String, int, List<int>, String)> documentList = <(int, String, int, L
 final globalGrpcClient = grpcp.GrpcClient.instance;
 
 List<int> selectedCategories = [];
+List<int> selectedDocumentGroups = [];
+
 
 List<(TimeOfDay, TimeOfDay, int, int, String, int)> activityOnDayList = <(TimeOfDay, TimeOfDay, int, int, String, int)>[];
 

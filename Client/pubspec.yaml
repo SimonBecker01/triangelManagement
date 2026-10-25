@@ -41,6 +41,8 @@ dependencies:
   protobuf: ^6.0.0
   speech_to_text: ^7.6.0-beta.4
   speech_to_text_platform_interface: ^2.5.0
+  pdf: ^3.13.1
+  month_picker_dialog: ^6.7.3
 
 dev_dependencies:
   flutter_test:

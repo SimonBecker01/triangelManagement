@@ -18,6 +18,8 @@ import 'package:management_triangel/pages/employer/kategorien.dart';
 import 'package:management_triangel/pages/employer/gruppen.dart';
 import 'package:management_triangel/pages/employer/taetigkeiten.dart';
 import 'package:management_triangel/pages/employer/systemeinstellungen.dart';
+import 'package:management_triangel/pages/employer/allgdokumente.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 
 Future<void> main() async {
@@ -26,6 +28,7 @@ Future<void> main() async {
     } on GrpcError catch (e) {
       print('gRPC error: ${e.codeName} (${e.message})');
     }
+    initializeDateFormatting("de_DE");
   runApp(const TriangelManagementMain());
 }
 
@@ -59,6 +62,7 @@ class TriangelManagementMain extends StatelessWidget {
         '/gruppen': (BuildContext context) => const GruppenScreen(),
         '/taetigkeiten': (BuildContext context) => const TaetigkeitenScreen(),
         '/systemeinstellungen': (BuildContext context) => const SystemeinstellungenScreen(),
+        '/allgdokumente': (BuildContext context) => const AllgemeineDokumenteScreen(),
       }
     );
   }

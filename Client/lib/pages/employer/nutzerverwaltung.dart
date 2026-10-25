@@ -267,6 +267,127 @@ class _NutzerverwaltungState extends State<NutzerverwaltungScreen>{
   
   // Blöde kleine Bildschirme...
   Widget _buildNarrowLayout(BuildContext context) {
-    return SingleChildScrollView();
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 1,
+            child: Row(
+              children: [
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 1,
+                  child: dropDownUsers,
+                ),
+                const Spacer(flex: 1),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Row(
+              children: [
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _loginController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _lnameController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _fnameController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: TextField(
+                    controller: _emailController,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: dropDownRoles,
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: Row(
+                    children: [
+                      Text("Passwort zurücksetzen:"),
+                      Checkbox(value: _passReset, onChanged: (bool? value) {setState(() { _passReset = value!;});})
+                    ]
+                  ),
+                ),
+                const Spacer(flex: 1),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Row(
+              children: [
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: FilledButton(
+                    onPressed: () async {
+                      ChangeUserReply resp = await globalGrpcClient.changeUser(UserObjekt(id: fn.Int64(nutzer[nutzerIndex].$1), loginName: _loginController.text, email: _emailController.text, fname: _fnameController.text, lname: _lnameController.text, role: rollen[roleIndex].$1), (_passReset) ? 1 : 0);
+                      if(resp.errorCode.isEmpty){
+                        _responseController.text = "${_loginController.text} wurde erfolgreich geändert";
+                      }else{
+                        _responseController.text = "${_loginController.text} konnte nicht geändert werden";
+                      }
+                      getUsersFromServer();
+                    },
+                    child: const Text('Änderung speichern'),
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 3,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pushNamed('/neuernutzer');
+                    },
+                    child: const Text('Neu'),
+                  ),
+                ),
+                const Spacer(flex: 1),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Center(child: TextField(controller: _responseController, enabled: false,)),
+          ),
+        ]
+      )
+    );
   }
 }

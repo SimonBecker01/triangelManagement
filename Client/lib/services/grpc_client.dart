@@ -28,10 +28,13 @@ class GrpcClient {
   GetRechteKategorienServiceClient? _getRechteKategorien;
   GetRechteGruppeServiceClient? _getRechteGruppe;
   SetRechteServiceClient? _setRechte;
+  ChangeRolleServiceClient? _changeRolle;
   ChangeKategorieServiceClient? _changeKategorie;
   ChangeGruppeServiceClient? _changeGruppe;
+  DeleteRolleServiceClient? _deleteRolle;
   DeleteKategorieServiceClient? _deleteKategorie;
   DeleteGruppeServiceClient? _deleteGruppe;
+  SetNewRolleServiceClient? _setNewRolle;
   SetNewKategorieServiceClient? _setNewKategorie;
   SetNewGruppeServiceClient? _setNewGruppe;
   ChangeTaetigkeitServiceClient? _changeTaetigkeit;
@@ -78,10 +81,13 @@ class GrpcClient {
     _getRechteKategorien = GetRechteKategorienServiceClient(channel);
     _getRechteGruppe = GetRechteGruppeServiceClient(channel);
     _setRechte = SetRechteServiceClient(channel);
+    _changeRolle = ChangeRolleServiceClient(channel);
     _changeKategorie = ChangeKategorieServiceClient(channel);
     _changeGruppe = ChangeGruppeServiceClient(channel);
+    _deleteRolle = DeleteRolleServiceClient(channel);
     _deleteKategorie = DeleteKategorieServiceClient(channel);
     _deleteGruppe = DeleteGruppeServiceClient(channel);
+    _setNewRolle = SetNewRolleServiceClient(channel);
     _setNewKategorie = SetNewKategorieServiceClient(channel);
     _setNewGruppe = SetNewGruppeServiceClient(channel);
     _changeTaetigkeit = ChangeTaetigkeitServiceClient(channel);
@@ -116,10 +122,13 @@ class GrpcClient {
     _getRechteKategorien = null;
     _getRechteGruppe = null;
     _setRechte = null;
+    _changeRolle = null;
     _changeKategorie = null;
     _changeGruppe = null;
+    _deleteRolle = null;
     _deleteKategorie = null;
     _deleteGruppe = null;
+    _setNewRolle = null;
     _setNewKategorie = null;
     _setNewGruppe = null;
     _changeTaetigkeit = null;
@@ -247,6 +256,12 @@ class GrpcClient {
             //..kategorienId = kategorienId
             , options: _opts());
 
+  Future<ChangeRolleReply> changeRolle(IdObjekt rolle) =>
+      _use(_changeRolle, 'changeRolle')
+          .changeRolle(ChangeRolleRequest()
+            ..rolle = rolle
+            , options: _opts());
+
   Future<ChangeKategorieReply> changeKategorie(IdObjekt kategorie) =>
       _use(_changeKategorie, 'changeKategorie')
           .changeKategorie(ChangeKategorieRequest()
@@ -259,6 +274,12 @@ class GrpcClient {
             ..gruppe = gruppe
             , options: _opts());
 
+  Future<DeleteRolleReply> deleteRolle(IdObjekt rolle) =>
+      _use(_deleteRolle, 'deleteRolle')
+          .deleteRolle(DeleteRolleRequest()
+            ..rolle = rolle
+            , options: _opts());
+
   Future<DeleteKategorieReply> deleteKategorie(IdObjekt kategorie) =>
       _use(_deleteKategorie, 'deleteKategorie')
           .deleteKategorie(DeleteKategorieRequest()
@@ -269,6 +290,12 @@ class GrpcClient {
       _use(_deleteGruppe, 'deleteKategorie')
           .deleteGruppe(DeleteGruppeRequest()
             ..gruppe = gruppe
+            , options: _opts());
+
+  Future<SetNewRolleReply> setNewRolle(IdObjekt rolle) =>
+      _use(_setNewRolle, 'setNewRolle')
+          .setNewRolle(SetNewRolleRequest()
+            ..rolle = rolle
             , options: _opts());
 
   Future<SetNewKategorieReply> setNewKategorie(IdObjekt kategorie) =>
