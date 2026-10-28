@@ -26,16 +26,16 @@ namespace services {
         }
         std::string r, g, b;
         if(database_.getSettingsValue("darkBGR", r) != 0 || r.empty()) r = "88";
-        if(database_.getSettingsValue("darkBGG", g) != 0 || g.empty()) r = "140";
-        if(database_.getSettingsValue("darkBGB", b) != 0 || b.empty()) r = "52";
+        if(database_.getSettingsValue("darkBGG", g) != 0 || g.empty()) g = "140";
+        if(database_.getSettingsValue("darkBGB", b) != 0 || b.empty()) b = "52";
         triangel::Color* dbg = reply->mutable_darkbg();
         dbg->set_r(std::stoi(r));
         dbg->set_g(std::stoi(g));
         dbg->set_b(std::stoi(b));
         
         if(database_.getSettingsValue("lightBGR", r) != 0 || r.empty()) r = "122";
-        if(database_.getSettingsValue("lightBGG", g) != 0 || g.empty()) r = "201";
-        if(database_.getSettingsValue("lightBGB", b) != 0 || b.empty()) r = "67";
+        if(database_.getSettingsValue("lightBGG", g) != 0 || g.empty()) g = "201";
+        if(database_.getSettingsValue("lightBGB", b) != 0 || b.empty()) b = "67";
         triangel::Color* lbg = reply->mutable_lightbg();
         lbg->set_r(std::stoi(r));
         lbg->set_g(std::stoi(g));

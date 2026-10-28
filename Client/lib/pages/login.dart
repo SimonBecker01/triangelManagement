@@ -23,11 +23,21 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  bool _loggingIn = false;
+
   Future<void> _login() async {
+    if (_loggingIn) return;
+    if (_nameController.text.trim().isEmpty || _passController.text.isEmpty) {
+      _responseController.text = 'Bitte Benutzername und Passwort eingeben.';
+      return;
+    }
+    setState(() => _loggingIn = true);
+    _responseController.clear();
     try {
       final loginResult =
           await globalGrpcClient.login(_nameController.text, _passController.text);
 
+      if (!mounted) return;
       if (loginResult.errorCode.isEmpty) {
         loginName = _nameController.text;
 
@@ -49,6 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         final docConfigResult = await globalGrpcClient.getDocumentConfig();
+        if (!mounted) return;
 
         documentGroupList.clear();
         documentGroupListId.clear();
@@ -67,6 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         final taetigkeitenResult = await globalGrpcClient.getTaetigkeiten();
+        if (!mounted) return;
 
         activityList.clear();
         activityListId.clear();
@@ -99,10 +111,19 @@ class _LoginScreenState extends State<LoginScreen> {
         _responseController.text = loginResult.errorCode;
       }
     } catch (error) {
-      if (error is GrpcError && error.code == StatusCode.permissionDenied) {
-        _responseController.text = error.codeName;
+      // Never leave a partially initialized authenticated session behind.
+      globalGrpcClient.setAuthToken('');
+      if (!mounted) return;
+      if (error is GrpcError && error.code == StatusCode.unauthenticated) {
+        _responseController.text = 'Benutzername oder Passwort ist falsch.';
+      } else if (error is GrpcError && error.code == StatusCode.permissionDenied) {
+        _responseController.text = 'Zugriff verweigert.';
+      } else {
+        _responseController.text = 'Anmeldung fehlgeschlagen. Bitte Verbindung prüfen und erneut versuchen.';
       }
-      _passController.text = '';
+      _passController.clear();
+    } finally {
+      if (mounted) setState(() => _loggingIn = false);
     }
   }
 
@@ -159,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Expanded(
                   flex: 2,
                   child: FilledButton(
-                    onPressed: _login,
+                    onPressed: _loggingIn ? null : _login,
                     child: const Text('Login'),
                   ),
                 ),
@@ -206,7 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 32),
               FilledButton(
-                onPressed: _login,
+                onPressed: _loggingIn ? null : _login,
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text('Login'),

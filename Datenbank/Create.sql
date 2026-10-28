@@ -24,10 +24,10 @@ CREATE TABLE `Betreuungen`(
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     `Betreuer` BIGINT UNSIGNED NOT NULL,
     `Klient` BIGINT UNSIGNED NOT NULL,
-    `GueltigVon` DATE NULL,
-    `GueltigBis` DATE NULL,
-    `Wochenstunden` BIGINT NULL,
-    `Stundensatz` BIGINT NULL
+    `GueltigVon` DATE NOT NULL DEFAULT '1700-01-01',
+    `GueltigBis` DATE NOT NULL DEFAULT '2700-01-01',
+    `Wochenstunden` BIGINT NOT NULL DEFAULT 0,
+    `Stundensatz` BIGINT NOT NULL DEFAULT 0
 );
 ALTER TABLE
     `Betreuungen` ADD UNIQUE `betreuungen_betreuer_klient_gueltigbis_gueltigvon_unique`(

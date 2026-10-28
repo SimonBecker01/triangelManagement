@@ -38,11 +38,13 @@ dependencies:
   interval_time_picker: ^4.0.0+12
   file_picker: ^10.3.10
   grpc: ^5.1.0
+  fixnum: ^1.1.1
   protobuf: ^6.0.0
   speech_to_text: ^7.6.0-beta.4
   speech_to_text_platform_interface: ^2.5.0
   pdf: ^3.13.1
   month_picker_dialog: ^6.7.3
+  flutter_colorpicker: ^1.1.0
 
 dev_dependencies:
   flutter_test:

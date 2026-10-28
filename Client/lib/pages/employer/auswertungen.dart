@@ -24,8 +24,7 @@ class _AuswertungenState extends State<AuswertungenScreen>{
   @override
   void initState() {
     super.initState();
-    getUsersFromServer();
-    getBetreuungenFromServer();
+    _loadData();
   }
 
   
@@ -58,27 +57,60 @@ class _AuswertungenState extends State<AuswertungenScreen>{
   }
   
 
-  void getUsersFromServer() async {
-    GetUsersReply usersRep = await globalGrpcClient.getUsers();
-    nutzer.clear();
-    for(int i = 0; i < usersRep.userList.length; i++){
-      nutzer.add((usersRep.userList[i].id.toInt(), "${usersRep.userList[i].fname} ${usersRep.userList[i].lname}", usersRep.userList[i].loginName));
+  // Load users first: Betreuung labels refer to users and cannot be built
+  // reliably while the two requests are racing each other.
+  Future<void> _loadData() async {
+    try {
+      final usersRep = await globalGrpcClient.getUsers();
+      final careRep = await globalGrpcClient.getBetreuungen(false);
+      if (!mounted) return;
+      nutzer = usersRep.userList.map((u) =>
+          (u.id.toInt(), '${u.fname} ${u.lname}', u.loginName)).toList();
+      betreuungen = [];
+      for (final care in careRep.betreuungen) {
+        final userIndex = nutzer.indexWhere((u) => u.$1 == care.betreuerId.toInt());
+        final childIndex = childListId.indexOf(care.klientId.toInt());
+        // A user or client may have been removed since this record was created.
+        final userName = userIndex < 0 ? 'Unbekannt' : nutzer[userIndex].$2;
+        final userLogin = userIndex < 0 ? '' : nutzer[userIndex].$3;
+        final childName = childIndex < 0 ? 'Unbekannt' : childList[childIndex];
+        betreuungen.add((care.id.toInt(), '$userName betreut $childName',
+            userLogin, care.wochenstunden.toInt()));
+      }
+      setState(() {});
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Daten konnten nicht geladen werden. Bitte erneut versuchen.')));
     }
   }
 
-  void getBetreuungenFromServer() async {
-    GetBetreuungenReply betreuungenRep = await globalGrpcClient.getBetreuungen(false);
-    betreuungen.clear();
-    for(int i = 0; i < betreuungenRep.betreuungen.length; i++){
-      int uind = 0;
-      for(uind;uind < nutzer.length; uind++){
-        if(nutzer[uind].$1 == betreuungenRep.betreuungen[i].betreuerId.toInt()) break;
+  Future<void> _createReport(String type) async {
+    try {
+      final date = Datum(year: selectedDate.year, month: selectedDate.month, day: 1);
+      if (type == 'Betreuer' && nutzer.isNotEmpty) {
+        final user = nutzer[nutzerIndex];
+        final result = await globalGrpcClient.auswertungBetreuer(fn.Int64(user.$1), date, _abrechenbar);
+        if (!mounted) return;
+        await _buildAndSavePdf(result, type, user.$2);
+      } else if (type == 'Klient' && childListId.contains(selectedChild)) {
+        final name = childList[childListId.indexOf(selectedChild)];
+        final result = await globalGrpcClient.auswertungKlient(fn.Int64(selectedChild), date, _abrechenbar);
+        if (!mounted) return;
+        await _buildAndSavePdf(result, type, name);
+      } else if (type == 'Betreuung' && betreuungen.isNotEmpty) {
+        final care = betreuungen[betreuungenIndex];
+        final result = await globalGrpcClient.auswertungBetreuung(fn.Int64(care.$1), date, _abrechenbar);
+        if (!mounted) return;
+        await _buildAndSavePdf(result, type, care.$2, care.$4);
+      } else {
+        throw StateError('Keine Auswahl verfügbar');
       }
-      betreuungen.add((betreuungenRep.betreuungen[i].id.toInt(), "${nutzer[uind].$2} betreut ${childList[childListId.indexOf(betreuungenRep.betreuungen[i].klientId.toInt())]}${(betreuungenRep.betreuungen[i].gueltigVon.year > 1800)?(" von ${betreuungenRep.betreuungen[i].gueltigVon.year}-${betreuungenRep.betreuungen[i].gueltigVon.month}-${betreuungenRep.betreuungen[i].gueltigVon.day}"):""}${(betreuungenRep.betreuungen[i].gueltigBis.year < 2500)?(" bis ${betreuungenRep.betreuungen[i].gueltigBis.year}-${betreuungenRep.betreuungen[i].gueltigBis.month}-${betreuungenRep.betreuungen[i].gueltigBis.day}"):""}", nutzer[uind].$3, betreuungenRep.betreuungen[i].wochenstunden.toInt()));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Auswertung konnte nicht erstellt oder gespeichert werden.')));
     }
-    setState(() {
-      //Rebuilding the DropDowns with filled Lists
-    });
   }
 
   Future<void> _buildAndSavePdf(AuswertungReply rep, String art, String name, [int? fls]) async {
@@ -276,9 +308,7 @@ class _AuswertungenState extends State<AuswertungenScreen>{
                 Expanded(
                   flex: 2,
                   child: FilledButton(
-                    onPressed: () async {
-                      _buildAndSavePdf(await globalGrpcClient.auswertungBetreuer(fn.Int64(nutzer[nutzerIndex].$1), Datum(year: selectedDate.year, month: selectedDate.month, day: 1), _abrechenbar ), "Betreuer", nutzer[nutzerIndex].$2);
-                    },
+                    onPressed: nutzer.isEmpty ? null : () => _createReport('Betreuer'),
                     child: const Text('Auswertung Betreuer'),
                   ),
                 ),
@@ -302,9 +332,7 @@ class _AuswertungenState extends State<AuswertungenScreen>{
                 Expanded(
                   flex: 2,
                   child: FilledButton(
-                    onPressed: () async {
-                      _buildAndSavePdf(await globalGrpcClient.auswertungKlient(fn.Int64(selectedChild), Datum(year: selectedDate.year, month: selectedDate.month, day: 1), _abrechenbar ), "Klient", childList[childListId.indexOf(selectedChild)]);
-                    },
+                    onPressed: childList.isEmpty ? null : () => _createReport('Klient'),
                     child: const Text('Auswertung Klient'),
                   ),
                 ),
@@ -327,9 +355,7 @@ class _AuswertungenState extends State<AuswertungenScreen>{
                 Expanded(
                   flex: 2,
                   child: FilledButton(
-                    onPressed: () async {
-                      _buildAndSavePdf(await globalGrpcClient.auswertungBetreuung(fn.Int64(betreuungen[betreuungenIndex].$1), Datum(year: selectedDate.year, month: selectedDate.month, day: 1), _abrechenbar ), "Betreuung", betreuungen[betreuungenIndex].$2, betreuungen[betreuungenIndex].$4);
-                    },
+                    onPressed: betreuungen.isEmpty ? null : () => _createReport('Betreuung'),
                     child: const Text('Auswertung Betreuung'),
                   ),
                 ),
@@ -345,6 +371,36 @@ class _AuswertungenState extends State<AuswertungenScreen>{
   
   // Blöde kleine Bildschirme...
   Widget _buildNarrowLayout(BuildContext context) {
-    return SingleChildScrollView();
+    // A vertical, scrollable form avoids the desktop row's cramped controls.
+    return Center(child: SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          OutlinedButton(
+            onPressed: () async {
+              final date = await showMonthPicker(context: context, initialDate: selectedDate);
+              if (date != null && mounted) setState(() => selectedDate = date);
+            },
+            child: Text('Monat: ${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}'),
+          ),
+          CheckboxListTile(title: const Text('Nur abrechenbar'), value: _abrechenbar,
+            onChanged: (value) => setState(() => _abrechenbar = value ?? false)),
+          const SizedBox(height: 16),
+          _buildUserDropdown(),
+          FilledButton(onPressed: nutzer.isEmpty ? null : () => _createReport('Betreuer'),
+            child: const Text('Auswertung Betreuer')),
+          const SizedBox(height: 20),
+          _buildChildDropdown(),
+          FilledButton(onPressed: childList.isEmpty ? null : () => _createReport('Klient'),
+            child: const Text('Auswertung Klient')),
+          const SizedBox(height: 20),
+          _buildBetreuungDropdown(),
+          FilledButton(onPressed: betreuungen.isEmpty ? null : () => _createReport('Betreuung'),
+            child: const Text('Auswertung Betreuung')),
+          TextButton(onPressed: _loadData, child: const Text('Daten erneut laden')),
+        ]),
+      ),
+    ));
   }
 }

@@ -22,6 +22,11 @@ AppBar standardAppBar({List<Widget> actions = const []}) {
 Widget logoutAction(BuildContext context) {
   return IconButton(
     onPressed: () {
+      // Invalidate local credentials when leaving the authenticated area.
+      globalGrpcClient.setAuthToken('');
+      loginName = '';
+      childList.clear();
+      childListId.clear();
       Navigator.of(context).pushNamedAndRemoveUntil(
         '/login',
         (Route<dynamic> route) => false,

@@ -43,7 +43,28 @@ class _SystemeinstellungenState extends State<SystemeinstellungenScreen>{
 
   
   Widget _buildWideLayout(BuildContext context) {
-    return Center();
+    return Center(child: Column
+    (
+      children: [
+        const Spacer(flex: 2),
+        Expanded(
+          flex: 5,
+          child:
+            Row(children: 
+              [
+                const Spacer(flex: 2),
+                FilledButton(
+                  onPressed: (){},
+                  child: Text("Hintergrundfarbe Hell auswählen"),
+                ),
+                const Spacer(flex: 1),
+
+              ],
+            ),
+        ),
+      ],
+    ),
+    );
   }
 
   

@@ -64,6 +64,7 @@ class GrpcClient {
       host,
       port: port,
       options: ChannelOptions(
+      //Not using a secure channel is simply not an option at all
         credentials: const ChannelCredentials.secure(),
       ),
     );
@@ -161,8 +162,8 @@ class GrpcClient {
   CallOptions _opts() {
     final token = _authToken;
     return token == null || token.isEmpty
-        ? CallOptions()
-        : CallOptions(metadata: {'authorization': 'Bearer $token'});
+        ? CallOptions(timeout: const Duration(seconds: 30))
+        : CallOptions(timeout: const Duration(seconds: 30), metadata: {'authorization': 'Bearer $token'});
   }
 
   T _use<T>(T? stub, String name) {

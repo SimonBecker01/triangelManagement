@@ -26,12 +26,13 @@ import 'package:intl/date_symbol_data_local.dart';
 
 
 Future<void> main() async {
+    WidgetsFlutterBinding.ensureInitialized();
     try{
       await globalGrpcClient.connect(host: 'allebescheuert.de', port: 50051);
     } on GrpcError catch (e) {
       print('gRPC error: ${e.codeName} (${e.message})');
     }
-    initializeDateFormatting("de_DE");
+    await initializeDateFormatting("de_DE");
   runApp(const TriangelManagementMain());
 }
 
