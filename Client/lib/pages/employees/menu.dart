@@ -59,6 +59,16 @@ class MenuScreen extends StatelessWidget {
                     child: const Text('Klientenakte'),
                   ),
                 ),
+                const Spacer(flex: 1),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pushNamed('/commondocuments');
+                    },
+                    child: const Text('Allgemeine Dokumente'),
+                  ),
+                ),
                 const Spacer(flex: 3),
               ],
             ),
@@ -97,6 +107,16 @@ class MenuScreen extends StatelessWidget {
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
                   child: Text('Klientenakte'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed('/commondocuments');
+                },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Allgemeine Dokumente'),
                 ),
               ),
             ],

@@ -46,6 +46,10 @@ class GrpcClient {
   AuswertungBetreuungServiceClient? _auswertungBetreuung;
   AuswertungBetreuerServiceClient? _auswertungBetreuer;
   AuswertungKlientServiceClient? _auswertungKlient;
+  ChangeKlientServiceClient? _changeKlient;
+  DeleteKlientServiceClient? _deleteKlient;
+  SetNewKlientServiceClient? _setNewKlient;
+  GetKlientenServiceClient? _getKlienten;
   
 
   bool get isConnected => _channel != null;
@@ -99,6 +103,10 @@ class GrpcClient {
     _auswertungBetreuung = AuswertungBetreuungServiceClient(channel);
     _auswertungBetreuer = AuswertungBetreuerServiceClient(channel);
     _auswertungKlient = AuswertungKlientServiceClient(channel);
+    _changeKlient = ChangeKlientServiceClient(channel);
+    _deleteKlient = DeleteKlientServiceClient(channel);
+    _setNewKlient = SetNewKlientServiceClient(channel);
+    _getKlienten = GetKlientenServiceClient(channel);
   }
 
   Future<void> disconnect() async {
@@ -140,6 +148,10 @@ class GrpcClient {
     _auswertungBetreuung = null;
     _auswertungBetreuer = null;
     _auswertungKlient = null;
+    _changeKlient = null;
+    _deleteKlient = null;
+    _setNewKlient = null;
+    _getKlienten = null;
   }
   
   void setAuthToken(String token) => _authToken = token;
@@ -328,9 +340,10 @@ class GrpcClient {
             ..taetigkeit = taetigkeit
             , options: _opts());
 
-  Future<GetBetreuungenReply> getBetreuungen() =>
+  Future<GetBetreuungenReply> getBetreuungen(bool aktiv) =>
       _use(_getBetreuungen, 'getBetreuungen')
           .getBetreuungen(GetBetreuungenRequest()
+            ..aktiv = aktiv
             , options: _opts());
 
   Future<EndBetreuungReply> endBetreuung(Int64 betreuungId) =>
@@ -368,4 +381,28 @@ class GrpcClient {
             ..monat = monat
             ..abrechenbar = abrechenbar
             , options: _opts());
+
+  Future<ChangeKlientReply> changeKlient(Klient klient) =>
+      _use(_changeKlient, 'changeKlient')
+          .changeKlient(ChangeKlientRequest()
+            ..klient = klient
+            , options: _opts());
+
+  Future<DeleteKlientReply> deleteKlient(Int64 klientId) =>
+      _use(_deleteKlient, 'deleteKlient')
+          .deleteKlient(DeleteKlientRequest()
+            ..klientId = klientId
+            , options: _opts());
+
+  Future<SetNewKlientReply> setNewKlient(Klient klient) =>
+      _use(_setNewKlient, 'setNewKlient')
+          .setNewKlient(SetNewKlientRequest()
+            ..klient = klient
+            , options: _opts());
+
+  Future<GetKlientenReply> getKlienten() =>
+      _use(_getKlienten, 'getKlienten')
+          .getKlienten(GetKlientenRequest(),
+              options: _opts());
+
 }

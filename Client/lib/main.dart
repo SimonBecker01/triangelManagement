@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
 import 'package:management_triangel/global.dart';
+import 'package:management_triangel/pages/employees/commondocuments.dart';
 import 'package:management_triangel/pages/employees/documents.dart';
+import 'package:management_triangel/pages/employer/betreuungen.dart';
+import 'package:management_triangel/pages/employer/klienten.dart';
 import 'package:management_triangel/pages/login.dart';
 import 'package:management_triangel/pages/employees/menu.dart';
 import 'package:management_triangel/pages/employees/newdocument.dart';
@@ -63,6 +66,9 @@ class TriangelManagementMain extends StatelessWidget {
         '/taetigkeiten': (BuildContext context) => const TaetigkeitenScreen(),
         '/systemeinstellungen': (BuildContext context) => const SystemeinstellungenScreen(),
         '/allgdokumente': (BuildContext context) => const AllgemeineDokumenteScreen(),
+        '/betreuungen': (BuildContext context) => const BetreuungenScreen(),
+        '/klientenverwaltung': (BuildContext context) => const KlientenverwaltungScreen(),
+        '/commondocuments': (BuildContext context) => const CommonDocumentsScreen(),
       }
     );
   }

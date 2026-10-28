@@ -124,7 +124,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
         rc = 0;
         await globalGrpcClient.sendDocument(setDoc, preppedFile);
         if (mounted) {
-          Navigator.of(context).pushNamed('/documents');
+          Navigator.of(context).pop();
         }
       }
     }
@@ -258,7 +258,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
                   flex: 3,
                   child: FilledButton(
                     onPressed: () {
-                      Navigator.of(context).pushNamed('/documents');
+                      Navigator.of(context).pop();
                     },
                     child: const Text('Abbrechen'),
                   ),
@@ -329,7 +329,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
                 Expanded(
                   child: FilledButton(
                     onPressed: () {
-                      Navigator.of(context).pushNamed('/documents');
+                      Navigator.of(context).pop();
                     },
                     child: const Text('Abbrechen'),
                   ),

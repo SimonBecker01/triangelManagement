@@ -144,6 +144,22 @@ service AuswertungKlientService {
   rpc AuswertungKlient(AuswertungKlientRequest) returns (AuswertungReply);
 }
 
+service ChangeKlientService {
+  rpc ChangeKlient(ChangeKlientRequest) returns (ChangeKlientReply);
+}
+
+service DeleteKlientService {
+  rpc DeleteKlient(DeleteKlientRequest) returns (DeleteKlientReply);
+}
+
+service SetNewKlientService {
+  rpc SetNewKlient(SetNewKlientRequest) returns (SetNewKlientReply);
+}
+
+service GetKlientenService {
+  rpc GetKlienten(GetKlientenRequest) returns (GetKlientenReply);
+}
+
 
 //types
 message Klient {
@@ -478,6 +494,7 @@ message SetNewTaetigkeitReply {
 }
 
 message GetBetreuungenRequest {
+  bool aktiv = 1;
 }
 
 message GetBetreuungenReply {
@@ -520,4 +537,35 @@ message AuswertungKlientRequest {
 
 message AuswertungReply {
   repeated Auswertung auswertung = 1;
+}
+
+message ChangeKlientRequest {
+  Klient klient = 1;
+}
+
+message ChangeKlientReply {
+  string error_code = 1;
+}
+
+message DeleteKlientRequest {
+  int64 klientId = 1;
+}
+
+message DeleteKlientReply {
+  string error_code = 1;
+}
+
+message SetNewKlientRequest {
+  Klient klient = 1;
+}
+
+message SetNewKlientReply {
+  string error_code = 1;
+}
+
+message GetKlientenRequest {
+}
+
+message GetKlientenReply {
+  repeated Klient klientenList = 1;
 }

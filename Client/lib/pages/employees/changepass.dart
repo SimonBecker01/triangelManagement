@@ -34,7 +34,7 @@ class _ChangePassScreenState extends State<ChangePassScreen> {
         if (changePassResult.errorCode.isEmpty) {
 
           if (mounted) {
-            Navigator.of(context).pushNamed('/menu');
+            Navigator.of(context).pop();
           }
         } else {
           _responseController.text = changePassResult.errorCode;

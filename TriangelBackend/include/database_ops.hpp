@@ -28,8 +28,8 @@ public:
     int setNewDokumentFile(const int64_t, const db::raw::Dokument, std::string&);
     int getTaetigkeiten(const int64_t, std::vector<db::raw::Taetigkeit>&);
     int getZeiteintraege(const int64_t, const std::string, const std::string, std::vector<db::raw::Zeiterfassung>&);
-    int addZeiteintrag(const int64_t, const db::raw::Zeiterfassung);
-    int changeZeiteintrag(const int64_t, const db::raw::Zeiterfassung);
+    int addZeiteintrag(const int64_t, const db::raw::Zeiterfassung, std::string& ec);
+    int changeZeiteintrag(const int64_t, const db::raw::Zeiterfassung, std::string& ec);
     int deleteZeiteintrag(const int64_t, const db::raw::Zeiterfassung);
     int changePass(const int64_t, const std::string, const std::string);
     int createUserByService(const int64_t, const db::raw::User&);
@@ -39,21 +39,28 @@ public:
     int getRechteKategorien(const int64_t, std::vector<db::raw::RechteKategorie>&);
     int getRechteGruppe(const int64_t, std::vector<db::raw::RechteGruppe>&);
     int setRechte(const int64_t, const uint64_t, std::vector<uint64_t>&, std::vector<uint64_t>&);
+    int changeRolle(const int64_t, const db::raw::Rolle&);
     int changeKategorie(const int64_t, const db::raw::Kategorie&);
     int changeGruppe(const int64_t, const db::raw::Gruppe&);
+    int deleteRolle(const int64_t, const db::raw::Rolle&);
     int deleteKategorie(const int64_t, const db::raw::Kategorie&);
     int deleteGruppe(const int64_t, const db::raw::Gruppe&);
+    int setNewRolle(const int64_t, const db::raw::Rolle&);
     int setNewKategorie(const int64_t, const db::raw::Kategorie&);
     int setNewGruppe(const int64_t, const db::raw::Gruppe&);
     int changeTaetigkeit(const int64_t, const db::raw::Taetigkeit&);
     int deleteTaetigkeit(const int64_t, const db::raw::Taetigkeit&);
     int setNewTaetigkeit(const int64_t, const db::raw::Taetigkeit&);
-    int getBetreuungen(const int64_t, std::vector<db::raw::Betreuung>&);
+    int getBetreuungen(const int64_t, bool, std::vector<db::raw::Betreuung>&);
     int endBetreuung(const int64_t, const int64_t);
     int setNewBetreuung(const int64_t, const db::raw::Betreuung&);
     int getAuswertungBetreuung(const int64_t, const int64_t, const std::string, const bool, std::vector<db::resolved::Zeiterfassung>&);
     int getAuswertungBetreuer(const int64_t, const int64_t, const std::string, const bool, std::vector<db::resolved::Zeiterfassung>&);
     int getAuswertungKlient(const int64_t, const int64_t, const std::string, const bool, std::vector<db::resolved::Zeiterfassung>&);
+    int changeKlient(const int64_t, const db::raw::Klient&);
+    int deleteKlient(const int64_t, const db::raw::Klient&);
+    int setNewKlient(const int64_t, const db::raw::Klient&);
+    int getKlientenList(const int64_t, std::vector<db::raw::Klient>&);
     
 
 

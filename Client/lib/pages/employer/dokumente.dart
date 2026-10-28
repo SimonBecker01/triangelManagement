@@ -310,7 +310,7 @@ class _DokumenteState extends State<DokumenteScreen>{
                   flex: 3,
                   child: FilledButton(
                     onPressed: () {
-                      Navigator.of(context).pushNamed('/neuesdokument');
+                      Navigator.of(context).pushNamed('/newdocument');
                     },
                     child: const Text('Neu'),
                   ),
@@ -375,7 +375,7 @@ class _DokumenteState extends State<DokumenteScreen>{
                 ),
                 FilledButton(
                   onPressed: () {
-                    Navigator.of(context).pushNamed('/neuesdokument');
+                    Navigator.of(context).pushNamed('/newdocument');
                   },
                   child: const Text('Neu'),
                 ),

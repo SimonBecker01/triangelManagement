@@ -276,13 +276,15 @@ namespace services {
         
         int rc;
 
+        std::string ec;
+
         switch (request->operation())
         {
         case 1:
-            rc = database_.addZeiteintrag(principal.user_id, zeiteintrag);
+            rc = database_.addZeiteintrag(principal.user_id, zeiteintrag, ec);
             break;
         case 2:
-            rc = database_.changeZeiteintrag(principal.user_id, zeiteintrag);
+            rc = database_.changeZeiteintrag(principal.user_id, zeiteintrag, ec);
             break;
         case 3:
             rc = database_.deleteZeiteintrag(principal.user_id, zeiteintrag);
@@ -298,6 +300,7 @@ namespace services {
         case 0:
             return grpc::Status::OK;
         case 3:
+            reply->set_error_code(ec);
             return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, "Database Error");
         default:
             return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
@@ -530,6 +533,29 @@ namespace services {
         }
     };
 
+    ChangeRolleService::ChangeRolleService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status ChangeRolleService::ChangeRolle(grpc::ServerContext* context, const triangel::ChangeRolleRequest* request, triangel::ChangeRolleReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Rolle rol;
+        rol.id = request->rolle().id();
+        rol.rolle = request->rolle().bezeichnung();
+
+        int rc = database_.changeRolle(principal.user_id, rol);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
     ChangeKategorieService::ChangeKategorieService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
     grpc::Status ChangeKategorieService::ChangeKategorie(grpc::ServerContext* context, const triangel::ChangeKategorieRequest* request, triangel::ChangeKategorieReply* reply) {
@@ -576,6 +602,28 @@ namespace services {
         }
     };
 
+    DeleteRolleService::DeleteRolleService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status DeleteRolleService::DeleteRolle(grpc::ServerContext* context, const triangel::DeleteRolleRequest* request, triangel::DeleteRolleReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Rolle rol;
+        rol.id = request->rolle().id();
+
+        int rc = database_.deleteRolle(principal.user_id, rol);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
     DeleteKategorieService::DeleteKategorieService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
     grpc::Status DeleteKategorieService::DeleteKategorie(grpc::ServerContext* context, const triangel::DeleteKategorieRequest* request, triangel::DeleteKategorieReply* reply) {
@@ -610,6 +658,28 @@ namespace services {
         grup.id = request->gruppe().id();
 
         int rc = database_.deleteGruppe(principal.user_id, grup);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    SetNewRolleService::SetNewRolleService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status SetNewRolleService::SetNewRolle(grpc::ServerContext* context, const triangel::SetNewRolleRequest* request, triangel::SetNewRolleReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Rolle rol;
+        rol.rolle = request->rolle().bezeichnung();
+
+        int rc = database_.setNewRolle(principal.user_id, rol);
 
         switch (rc)
         {
@@ -746,7 +816,7 @@ namespace services {
 
         std::vector<db::raw::Betreuung> betreuungen;
 
-        int rc = database_.getBetreuungen(principal.user_id, betreuungen);
+        int rc = database_.getBetreuungen(principal.user_id, request->aktiv(), betreuungen);
 
         switch (rc)
         {
@@ -835,7 +905,7 @@ namespace services {
 
         std::vector<db::resolved::Zeiterfassung> eintraege;
 
-        int rc = database_.getAuswertungBetreuung(principal.user_id, request->betreuung(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()), request->abrechenbar(), eintraege);
+        int rc = database_.getAuswertungBetreuung(principal.user_id, request->betreuung(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()) + "-01", request->abrechenbar(), eintraege);
 
         switch (rc)
         {
@@ -879,7 +949,7 @@ namespace services {
         std::vector<db::resolved::Zeiterfassung> eintraege;
 
 
-        int rc = database_.getAuswertungBetreuer(principal.user_id, request->betreuer(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()), request->abrechenbar(), eintraege);
+        int rc = database_.getAuswertungBetreuer(principal.user_id, request->betreuer(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()) + "-01", request->abrechenbar(), eintraege);
 
         switch (rc)
         {
@@ -923,7 +993,7 @@ namespace services {
         std::vector<db::resolved::Zeiterfassung> eintraege;
 
 
-        int rc = database_.getAuswertungKlient(principal.user_id, request->klient(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()), request->abrechenbar(), eintraege);
+        int rc = database_.getAuswertungKlient(principal.user_id, request->klient(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()) + "-01", request->abrechenbar(), eintraege);
 
         switch (rc)
         {
@@ -956,6 +1026,108 @@ namespace services {
         }
     };
 
-	
+    ChangeKlientService::ChangeKlientService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status ChangeKlientService::ChangeKlient(grpc::ServerContext* context, const triangel::ChangeKlientRequest* request, triangel::ChangeKlientReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Klient klient;
+        klient.lastName = request->klient().nname();
+        klient.firstName = request->klient().fname();
+
+        int rc = database_.changeKlient(principal.user_id, klient);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    DeleteKlientService::DeleteKlientService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status DeleteKlientService::DeleteKlient(grpc::ServerContext* context, const triangel::DeleteKlientRequest* request, triangel::DeleteKlientReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Klient klient;
+        klient.id = request->klientid();
+
+
+        int rc = database_.deleteKlient(principal.user_id, klient);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+
+    SetNewKlientService::SetNewKlientService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status SetNewKlientService::SetNewKlient(grpc::ServerContext* context, const triangel::SetNewKlientRequest* request, triangel::SetNewKlientReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        db::raw::Klient klient;
+        klient.lastName = request->klient().nname();
+        klient.firstName = request->klient().fname();
+
+
+        int rc = database_.setNewKlient(principal.user_id, klient);
+
+        switch (rc)
+        {
+        case 0:
+            return grpc::Status::OK;
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
+    
+
+    GetKlientenService::GetKlientenService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status GetKlientenService::GetKlienten(grpc::ServerContext* context, const triangel::GetKlientenRequest* request, triangel::GetKlientenReply* reply) {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        std::vector<db::raw::Klient> klientListVector;
+
+        int rc = database_.getKlientenList(principal.user_id, klientListVector);
+
+
+        switch (rc)
+        {
+        case 0:
+            for(int i = 0;i < klientListVector.size();i++){
+            
+                triangel::Klient* eintrag = reply->add_klientenlist();
+
+                eintrag->set_id(klientListVector.at(i).id);
+                eintrag->set_nname(klientListVector.at(i).lastName);
+                eintrag->set_fname(klientListVector.at(i).firstName);
+
+            }
+            return grpc::Status::OK;
+        case 3:
+            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Unauthorized Access");
+        default:
+            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        }
+    };
 	
 }

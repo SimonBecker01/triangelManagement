@@ -67,14 +67,14 @@ class _AuswertungenState extends State<AuswertungenScreen>{
   }
 
   void getBetreuungenFromServer() async {
-    GetBetreuungenReply betreuungenRep = await globalGrpcClient.getBetreuungen();
+    GetBetreuungenReply betreuungenRep = await globalGrpcClient.getBetreuungen(false);
     betreuungen.clear();
     for(int i = 0; i < betreuungenRep.betreuungen.length; i++){
       int uind = 0;
       for(uind;uind < nutzer.length; uind++){
         if(nutzer[uind].$1 == betreuungenRep.betreuungen[i].betreuerId.toInt()) break;
       }
-      betreuungen.add((betreuungenRep.betreuungen[i].id.toInt(), "${nutzer[uind].$2} betreut ${childList[childListId.indexOf(betreuungenRep.betreuungen[i].klientId.toInt())]}${(betreuungenRep.betreuungen[i].gueltigVon.year > 1800)?(" von ${betreuungenRep.betreuungen[i].gueltigVon.year}-${betreuungenRep.betreuungen[i].gueltigVon.month}-${betreuungenRep.betreuungen[i].gueltigVon.day}"):""}${(betreuungenRep.betreuungen[i].gueltigBis.year > 1800)?(" bis ${betreuungenRep.betreuungen[i].gueltigBis.year}-${betreuungenRep.betreuungen[i].gueltigBis.month}-${betreuungenRep.betreuungen[i].gueltigBis.day}"):""}", nutzer[uind].$3, betreuungenRep.betreuungen[i].wochenstunden.toInt()));
+      betreuungen.add((betreuungenRep.betreuungen[i].id.toInt(), "${nutzer[uind].$2} betreut ${childList[childListId.indexOf(betreuungenRep.betreuungen[i].klientId.toInt())]}${(betreuungenRep.betreuungen[i].gueltigVon.year > 1800)?(" von ${betreuungenRep.betreuungen[i].gueltigVon.year}-${betreuungenRep.betreuungen[i].gueltigVon.month}-${betreuungenRep.betreuungen[i].gueltigVon.day}"):""}${(betreuungenRep.betreuungen[i].gueltigBis.year < 2500)?(" bis ${betreuungenRep.betreuungen[i].gueltigBis.year}-${betreuungenRep.betreuungen[i].gueltigBis.month}-${betreuungenRep.betreuungen[i].gueltigBis.day}"):""}", nutzer[uind].$3, betreuungenRep.betreuungen[i].wochenstunden.toInt()));
     }
     setState(() {
       //Rebuilding the DropDowns with filled Lists
@@ -95,10 +95,10 @@ class _AuswertungenState extends State<AuswertungenScreen>{
       nextRow.add("${withLeadingZero.format(rep.auswertung[i].anfang.hour)}:${withLeadingZero.format(rep.auswertung[i].anfang.minute)}-${withLeadingZero.format(rep.auswertung[i].ende.hour)}:${withLeadingZero.format(rep.auswertung[i].ende.minute)}");
       int minuten = rep.auswertung[i].ende.hour * 60 + rep.auswertung[i].ende.minute - rep.auswertung[i].anfang.hour * 60 - rep.auswertung[i].anfang.minute;
       summeMinuten += minuten;
-      nextRow.add("${(minuten ~/ 60)}:${withLeadingZero.format(minuten % 60)}");
+      nextRow.add((minuten / 60).toStringAsFixed(2));
       tablePrepared.add(nextRow);
     }
-    tablePrepared.add(["", "", "", "Summe", "${summeMinuten ~/ 60}:${withLeadingZero.format(summeMinuten % 60)}"]);
+    tablePrepared.add(["", "", "", "Summe", (summeMinuten / 60).toStringAsFixed(2)]);
     final img = await DefaultAssetBundle.of(context).load('Assets/Logo.png');
     final imageBytes = img.buffer.asUint8List();
     pw.Image logo = pw.Image(pw.MemoryImage(imageBytes));
@@ -110,7 +110,7 @@ class _AuswertungenState extends State<AuswertungenScreen>{
           pw.Row(children: [pw.Spacer(flex:8), pw.Container(alignment: pw.Alignment.topRight, height: 50, child: logo)]),
           pw.Row(children: [pw.Text("Nachweis für Abrechnung ${formatSpelled.format(selectedDate)}", textScaleFactor: 2)]),
           pw.Row(children: [pw.Text(name, textScaleFactor: 1)]),
-          (fls != null && fls > 0)?(pw.Row(children: [pw.Text("Leistungsumfang: max. ${fls/60} FLS/Woche", textScaleFactor: 1)])):(pw.SizedBox(height: 1, width: 1))
+          (fls != null && fls > 0)?(pw.Row(children: [pw.Text("Leistungsumfang: max. ${(fls/60).toStringAsFixed(2)} FLS/Woche", textScaleFactor: 1)])):(pw.SizedBox(height: 1, width: 1))
         ])),
       
       footer: (context) => pw.Padding(

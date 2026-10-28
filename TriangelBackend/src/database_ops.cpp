@@ -76,16 +76,28 @@ int DatabaseOperator::checkUser(const std::string& login, const std::string& pas
 
 int DatabaseOperator::getKlienten(const int64_t user_id, std::vector<db::raw::Klient>& klienten){
     
+    int rc = checkGF(user_id);
+
     mysqlx::Session session = m_dbClient.getSession();
 
     try {
         mysqlx::SqlResult result;
-        
-        mysqlx::SqlStatement query = session.sql(
-            "SELECT id, Nachname, Vorname "
-            "FROM Klienten WHERE id IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?)"
-        );
-        result = query.bind(user_id).execute();
+        if(rc != 0){
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Nachname, Vorname "
+                "FROM Klienten "
+                "WHERE id IN (SELECT Klient FROM Betreuungen WHERE Betreuer = ?) "
+                "AND id != 0 "
+            );
+            result = query.bind(user_id).execute();
+        }else{
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Nachname, Vorname "
+                "FROM Klienten "
+                "WHERE id != 0 "
+            );
+            result = query.execute();
+        }
 
         
         for(mysqlx::Row row : result) {
@@ -590,19 +602,23 @@ int DatabaseOperator::getZeiteintraege(const int64_t id, const std::string vonDt
     return -1;
 }
 
-int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfassung neuerEintrag)
+int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfassung neuerEintrag, std::string& ec)
 {
     mysqlx::Session session = m_dbClient.getSession();
     try {
         mysqlx::SqlResult result;
 
+        std::string month = neuerEintrag.von.substr(0, 8) + "01";
+
         mysqlx::SqlStatement query = session.sql(
-            "SELECT id "
+            "SELECT id, Wochenstunden, DATEDIFF(GueltigVon, STR_TO_DATE(?,'%Y-%m-%d')), DATEDIFF(LAST_OF_MONTH(STR_TO_DATE(?,'%Y-%m-%d')), GueltigBis), TIME_TO_SEC(TIMEDIFF(STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), STR_TO_DATE(?,'%Y-%m-%d-%H-%i'))) "
             "FROM Betreuungen "
             "WHERE Betreuer = ? "
             "AND Klient = ? "
+            "AND GueltigVon < STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND GueltigBis > STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
         );
-        result = query.bind(id).bind(neuerEintrag.klient).execute();
+        result = query.bind(month).bind(month).bind(neuerEintrag.bis).bind(neuerEintrag.von).bind(id).bind(neuerEintrag.klient).bind(neuerEintrag.von).bind(neuerEintrag.bis).execute();
 
 
         mysqlx::Row row = result.fetchOne();
@@ -613,6 +629,13 @@ int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfass
         }
         
         int64_t betreuungId = row[0];
+        int64_t wochenstunden = row[1];
+        int64_t tageVor = row[2];
+        int64_t tageNach = row[3];
+        int64_t fehlendeTage = ((tageVor>0)?tageVor:0) + ((tageNach>0)?tageNach:0);
+        double monatsstunden = ((4.3 * wochenstunden) / 30.4) * (30.4 - fehlendeTage);
+        int64_t timeToTake = row[4];
+
         
         query = session.sql(
             "SELECT z.id "
@@ -629,6 +652,30 @@ int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfass
 
         if (row) {
             std::cout << "Timeslot overlap" << std::endl;
+            ec = "Überschneidung mit einem bestehendem Eintrag!";
+            return 3;
+        }
+        
+        query = session.sql(
+            "SELECT SUM(TIME_TO_SEC(TIMEDIFF(z.Bis, z.Von))) "
+            "FROM Zeiterfassung z "
+            "JOIN Taetigkeit t "
+            "ON z.Taetigkeit = t.id "
+            "WHERE z.Betreuung = ? "
+            "AND t.Abrechenbar = true "
+            "AND z.Bis > STR_TO_DATE(?,'%Y-%m-%d') "
+            "AND z.Von < LAST_DAY(STR_TO_DATE(?,'%Y-%m-%d')) "
+        );
+        result = query.bind(id).bind(month).bind(month).execute();
+
+        
+        row = result.fetchOne();
+
+        int64_t timeTaken = row[0];
+
+        if (timeTaken + timeToTake > monatsstunden * 60) {
+            std::cout << "FLS exceeded" << std::endl;
+            ec = "Dieser Eintrag benötigt " + std::to_string(timeToTake / 60) + " Minuten, es sind ohne ihn bereits " + std::to_string(timeTaken/60) + " Minuten belegt von den verfügbaren " + std::to_string(monatsstunden) + " Minuten für diese Betreuung in diesem Monat.";
             return 3;
         }
 
@@ -648,17 +695,21 @@ int DatabaseOperator::addZeiteintrag(const int64_t id, const db::raw::Zeiterfass
     return -1;
 }
 
-int DatabaseOperator::changeZeiteintrag(const int64_t id, const db::raw::Zeiterfassung neuerEintrag)
+int DatabaseOperator::changeZeiteintrag(const int64_t id, const db::raw::Zeiterfassung neuerEintrag, std::string& ec)
 {
     mysqlx::Session session = m_dbClient.getSession();
     try {
         mysqlx::SqlResult result;
+        
+        std::string month = neuerEintrag.von.substr(0, 8) + "01";
 
         mysqlx::SqlStatement query = session.sql(
-            "SELECT id "
+            "SELECT id, Wochenstunden, DATEDIFF(GueltigVon, STR_TO_DATE(?,'%Y-%m-%d')), DATEDIFF(LAST_OF_MONTH(STR_TO_DATE(?,'%Y-%m-%d')), GueltigBis), TIME_TO_SEC(TIMEDIFF(STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), STR_TO_DATE(?,'%Y-%m-%d-%H-%i'))) "
             "FROM Betreuungen "
             "WHERE Betreuer = ? "
             "AND Klient = ? "
+            "AND GueltigVon < STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
+            "AND GueltigBis > STR_TO_DATE(?,'%Y-%m-%d-%H-%i') "
         );
         result = query.bind(id).bind(neuerEintrag.klient).execute();
 
@@ -671,6 +722,12 @@ int DatabaseOperator::changeZeiteintrag(const int64_t id, const db::raw::Zeiterf
         }
         
         int64_t betreuungId = row[0];
+        int64_t wochenstunden = row[1];
+        int64_t tageVor = row[2];
+        int64_t tageNach = row[3];
+        int64_t fehlendeTage = ((tageVor>0)?tageVor:0) + ((tageNach>0)?tageNach:0);
+        double monatsstunden = ((4.3 * wochenstunden) / 30.4) * (30.4 - fehlendeTage);
+        int64_t timeToTake = row[4];
         
         query = session.sql(
             "SELECT z.id "
@@ -688,6 +745,30 @@ int DatabaseOperator::changeZeiteintrag(const int64_t id, const db::raw::Zeiterf
 
         if (row) {
             std::cout << "Timeslot overlap" << std::endl;
+            return 3;
+        }
+        
+        query = session.sql(
+            "SELECT SUM(TIME_TO_SEC(TIMEDIFF(z.Bis, z.Von))) "
+            "FROM Zeiterfassung z "
+            "JOIN Taetigkeit t "
+            "ON z.Taetigkeit = t.id "
+            "WHERE z.Betreuung = ? "
+            "AND z.id != ? "
+            "AND t.Abrechenbar = true "
+            "AND z.Bis > STR_TO_DATE(?,'%Y-%m-%d') "
+            "AND z.Von < LAST_DAY(STR_TO_DATE(?,'%Y-%m-%d')) "
+        );
+        result = query.bind(id).bind(neuerEintrag.id).bind(month).bind(month).execute();
+
+        
+        row = result.fetchOne();
+
+        int64_t timeTaken = row[0];
+
+        if (timeTaken + timeToTake > monatsstunden * 60) {
+            std::cout << "FLS exceeded" << std::endl;
+            ec = "FLS " + std::to_string((timeTaken + timeToTake) / 60) + ">" + std::to_string(monatsstunden);
             return 3;
         }
 
@@ -1149,6 +1230,34 @@ int DatabaseOperator::setRechte(const int64_t id, const uint64_t rolle, std::vec
 }
 
 
+int DatabaseOperator::changeRolle(const int64_t id, const db::raw::Rolle& rol)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "UPDATE Rollen "
+                "SET Rolle = ? "
+                "WHERE id = ? "
+            );
+            query.bind(rol.rolle).bind(rol.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
 int DatabaseOperator::changeKategorie(const int64_t id, const db::raw::Kategorie& kat)
 {
     int rc = checkGF(id);
@@ -1192,6 +1301,33 @@ int DatabaseOperator::changeGruppe(const int64_t id, const db::raw::Gruppe& grup
                 "WHERE id = ? "
             );
             query.bind(grup.name).bind(grup.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::deleteRolle(const int64_t id, const db::raw::Rolle& rol)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "DELETE FROM Rollen "
+                "WHERE id = ? "
+            );
+            query.bind(rol.id).execute();
 
             return 0;
 
@@ -1261,6 +1397,33 @@ int DatabaseOperator::deleteGruppe(const int64_t id, const db::raw::Gruppe& grup
                 "WHERE id = ? "
             );
             query.bind(grup.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::setNewRolle(const int64_t id, const db::raw::Rolle& rol)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "INSERT INTO Rollen (Rolle) "
+                "VALUES(?) "
+            );
+            mysqlx::SqlResult result = query.bind(rol.rolle).execute();
 
             return 0;
 
@@ -1427,7 +1590,7 @@ int DatabaseOperator::setNewTaetigkeit(const int64_t id, const db::raw::Taetigke
 }
 
 
-int DatabaseOperator::getBetreuungen(const int64_t id, std::vector<db::raw::Betreuung>& betreuungenList)
+int DatabaseOperator::getBetreuungen(const int64_t id, bool aktiv, std::vector<db::raw::Betreuung>& betreuungenList)
 {
     int rc = checkGF(id);
     if(rc != 0){
@@ -1436,11 +1599,21 @@ int DatabaseOperator::getBetreuungen(const int64_t id, std::vector<db::raw::Betr
 
         try {
             mysqlx::Session session = m_dbClient.getSession();
-            mysqlx::SqlStatement query = session.sql(
-                "SELECT id, Betreuer, Klient, DATE_FORMAT(GueltigVon,'%Y-%m-%d-%H-%i'), DATE_FORMAT(GueltigBis,'%Y-%m-%d-%H-%i'), Stundensatz, Wochenstunden "
-                "FROM Betreuungen "
-            );
-            mysqlx::SqlResult result = query.execute();
+            mysqlx::SqlResult result;
+            if(aktiv){
+                mysqlx::SqlStatement query = session.sql(
+                    "SELECT id, Betreuer, Klient, DATE_FORMAT(GueltigVon,'%Y-%m-%d'), DATE_FORMAT(GueltigBis,'%Y-%m-%d'), Stundensatz, Wochenstunden "
+                    "FROM Betreuungen "
+                    "WHERE SYSDATE() BETWEEN GueltigVon AND GueltigBis "
+                );
+                result = query.execute();
+            }else{
+                mysqlx::SqlStatement query = session.sql(
+                    "SELECT id, Betreuer, Klient, DATE_FORMAT(GueltigVon,'%Y-%m-%d'), DATE_FORMAT(GueltigBis,'%Y-%m-%d'), Stundensatz, Wochenstunden "
+                    "FROM Betreuungen "
+                );
+                result = query.execute();
+            }
 
             for(mysqlx::Row row : result) {
                 db::raw::Betreuung nextEintrag;
@@ -1478,11 +1651,17 @@ int DatabaseOperator::endBetreuung(const int64_t id, const int64_t idBetreuung)
         try {
             mysqlx::Session session = m_dbClient.getSession();
             mysqlx::SqlStatement query = session.sql(
-                "UPDATE Betreuung"
-                "SET GueltigBis = sysdate -1 "
+                "UPDATE Betreuungen "
+                "SET GueltigBis = SYSDATE() - INTERVAL 1 DAY "
                 "WHERE id = ? "
             );
             mysqlx::SqlResult result = query.bind(idBetreuung).execute();
+
+            query = session.sql(
+                "DELETE FROM Betreuungen "
+                "WHERE GueltigBis < GueltigVon "
+            );
+            query.execute();
 
             return 0;
 
@@ -1506,13 +1685,39 @@ int DatabaseOperator::setNewBetreuung(const int64_t id, const db::raw::Betreuung
         try {
             mysqlx::Session session = m_dbClient.getSession();
 
-            //TBD: Welche Einschränkungen?
             
             mysqlx::SqlStatement query = session.sql(
-                "INSERT INTO Betreuungen (Betreuer, Klient, GueltigBis, Stundensatz, Wochenstunden) "
-                "VALUES (?, ?, STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), STR_TO_DATE(?,'%Y-%m-%d-%H-%i'), ?, ?) "
+                "SELECT DATE_FORMAT(MIN(GueltigVon),'%Y-%m-%d') "
+                "FROM Betreuungen "
+                "WHERE Betreuer = ? "
+                "AND Klient = ?"
+                "AND GueltVon BETWEEN STR_TO_DATE(?,'%Y-%m-%d') AND STR_TO_DATE(?,'%Y-%m-%d') "
             );
-            mysqlx::SqlResult result = query.bind(betreuung.betreuer).bind(betreuung.klient).bind(betreuung.gueltigVon).bind(betreuung.gueltigBis).bind(betreuung.stundensatz).bind(betreuung.wochenstunden).execute();
+            mysqlx::SqlResult result = query.bind(betreuung.betreuer).bind(betreuung.klient).bind(betreuung.gueltigVon).bind(betreuung.gueltigBis).execute();
+
+            
+            mysqlx::Row row = result.fetchOne();
+
+            std::string gBis = betreuung.gueltigBis;
+            if(row != 0 && static_cast<int>(row[0]) != 0){
+                gBis = std::string(row[0]);
+            }
+
+            
+            query = session.sql(
+                "UPDATE Betreuungen "
+                "SET GueltBis = ? - INTERVAL 1 DAY "
+                "WHERE Betreuer = ? "
+                "AND Klient = ?"
+                "AND GueltBis BETWEEN STR_TO_DATE(?,'%Y-%m-%d') AND STR_TO_DATE(?,'%Y-%m-%d') "
+            );
+            query.bind(gBis).bind(betreuung.betreuer).bind(betreuung.klient).bind(betreuung.gueltigVon).bind(gBis).execute();
+            
+            query = session.sql(
+                "INSERT INTO Betreuungen (Betreuer, Klient, GueltigVon, GueltigBis, Stundensatz, Wochenstunden) "
+                "VALUES (?, ?, STR_TO_DATE(?,'%Y-%m-%d'), STR_TO_DATE(?,'%Y-%m-%d'), ?, ?) "
+            );
+            query.bind(betreuung.betreuer).bind(betreuung.klient).bind(betreuung.gueltigVon).bind(gBis).bind(betreuung.stundensatz).bind(betreuung.wochenstunden).execute();
 
             return 0;
 
@@ -1545,14 +1750,14 @@ int DatabaseOperator::getAuswertungBetreuung(const int64_t id, const int64_t bet
                 "FROM Zeiterfassung z "
                 "JOIN Betreuungen b "
                 "ON z.Betreuung = b.id "
-                "JOIN Taetigkeiten t "
+                "JOIN Taetigkeit t "
                 "ON t.id = z.Taetigkeit "
                 "JOIN Users u "
                 "ON u.id = b.Betreuer "
                 "JOIN Klienten k "
                 "ON k.id = b.Klient "
                 "WHERE b.id = ? "
-                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m') AND STR_TO_DATE(?,'%Y-%m') + INTERVAL 1 MONTH "
+                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m-%d') AND STR_TO_DATE(?,'%Y-%m-%d') + INTERVAL 1 MONTH "
                 + excludeNAString
             );
 
@@ -1603,14 +1808,14 @@ int DatabaseOperator::getAuswertungBetreuer(const int64_t id, const int64_t betr
                 "FROM Zeiterfassung z "
                 "JOIN Betreuungen b "
                 "ON z.Betreuung = b.id "
-                "JOIN Taetigkeiten t "
+                "JOIN Taetigkeit t "
                 "ON t.id = z.Taetigkeit "
                 "JOIN Users u "
                 "ON u.id = b.Betreuer "
                 "JOIN Klienten k "
                 "ON k.id = b.Klient "
                 "WHERE u.id = ? "
-                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m') AND STR_TO_DATE(?,'%Y-%m') + INTERVAL 1 MONTH "
+                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m-%d') AND STR_TO_DATE(?,'%Y-%m-%d') + INTERVAL 1 MONTH "
                 + excludeNAString
             );
 
@@ -1661,14 +1866,14 @@ int DatabaseOperator::getAuswertungKlient(const int64_t id, const int64_t klient
                 "FROM Zeiterfassung z "
                 "JOIN Betreuungen b "
                 "ON z.Betreuung = b.id "
-                "JOIN Taetigkeiten t "
+                "JOIN Taetigkeit t "
                 "ON t.id = z.Taetigkeit "
                 "JOIN Users u "
                 "ON u.id = b.Betreuer "
                 "JOIN Klienten k "
                 "ON k.id = b.Klient "
                 "WHERE k.id = ? "
-                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m') AND STR_TO_DATE(?,'%Y-%m') + INTERVAL 1 MONTH "
+                "AND z.Von BETWEEN STR_TO_DATE(?,'%Y-%m-%d') AND STR_TO_DATE(?,'%Y-%m-%d') + INTERVAL 1 MONTH "
                 + excludeNAString
             );
 
@@ -1699,6 +1904,142 @@ int DatabaseOperator::getAuswertungKlient(const int64_t id, const int64_t klient
     return -1;
 }
 
+
+int DatabaseOperator::changeKlient(const int64_t id, const db::raw::Klient& klient)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "UPDATE Klient "
+                "SET Nachname = ? "
+                ", Vorname = ? "
+                "WHERE id = ? "
+            );
+            mysqlx::SqlResult result = query.bind(klient.lastName).bind(klient.firstName).bind(klient.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::deleteKlient(const int64_t id, const db::raw::Klient& klient)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT COUNT(*) "
+                "FROM Betreuung "
+                "WHERE Klient = ? "
+                "AND GueltigBis > SYSDATE() + INTERVAL 1 YEAR "
+            );
+            mysqlx::SqlResult result = query.bind(klient.id).execute();
+
+            
+            mysqlx::Row row = result.fetchOne();
+
+            if(row != 0 && static_cast<int>(row[0]) != 0){
+                std::cerr << "Klient can not be deleted, still in use" << std::endl;
+                return 2;
+            }
+
+            query = session.sql(
+                "DELETE FROM Klient "
+                "WHERE id = ? "
+            );
+            query.bind(klient.id).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+
+int DatabaseOperator::setNewKlient(const int64_t id, const db::raw::Klient& klient)
+{
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "INSERT INTO Klient (Nachname, Vorname) "
+                "VALUES(?, ?) "
+            );
+            mysqlx::SqlResult result = query.bind(klient.lastName).bind(klient.firstName).execute();
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
+
+int DatabaseOperator::getKlientenList(const int64_t id, std::vector<db::raw::Klient> & klientList)
+{
+
+    int rc = checkGF(id);
+    if(rc != 0){
+            return rc;
+    }else{
+
+        try {
+            mysqlx::Session session = m_dbClient.getSession();
+            mysqlx::SqlStatement query = session.sql(
+                "SELECT id, Nachname, Vorname "
+                "FROM Klienten "
+                "WHERE id != 0 "
+            );
+            mysqlx::SqlResult result = query.execute();
+
+            for(mysqlx::Row row : result) {
+                db::raw::Klient nextEintrag;
+
+                nextEintrag.id = (int32_t)row[0];
+                nextEintrag.lastName = std::string(row[1]);
+                nextEintrag.firstName = std::string(row[2]);
+
+                klientList.push_back(nextEintrag);
+            }
+
+            return 0;
+
+        }catch (const mysqlx::Error &err) {
+            std::cerr << "Database Query Error: " << err.what() << std::endl;
+            return 1;
+        }
+    }
+
+    return -1;
+}
 
 
 std::string DatabaseOperator::makeHash(const std::string& pass, const std::string& salt)

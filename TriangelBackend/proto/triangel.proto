@@ -72,6 +72,10 @@ service SetRechteService {
   rpc SetRechte(SetRechteRequest) returns (SetRechteReply);
 }
 
+service ChangeRolleService {
+  rpc ChangeRolle(ChangeRolleRequest) returns (ChangeRolleReply);
+}
+
 service ChangeKategorieService {
   rpc ChangeKategorie(ChangeKategorieRequest) returns (ChangeKategorieReply);
 }
@@ -80,12 +84,20 @@ service ChangeGruppeService {
   rpc ChangeGruppe(ChangeGruppeRequest) returns (ChangeGruppeReply);
 }
 
+service DeleteRolleService {
+  rpc DeleteRolle(DeleteRolleRequest) returns (DeleteRolleReply);
+}
+
 service DeleteKategorieService {
   rpc DeleteKategorie(DeleteKategorieRequest) returns (DeleteKategorieReply);
 }
 
 service DeleteGruppeService {
   rpc DeleteGruppe(DeleteGruppeRequest) returns (DeleteGruppeReply);
+}
+
+service SetNewRolleService {
+  rpc SetNewRolle(SetNewRolleRequest) returns (SetNewRolleReply);
 }
 
 service SetNewKategorieService {
@@ -130,6 +142,22 @@ service AuswertungBetreuerService {
 
 service AuswertungKlientService {
   rpc AuswertungKlient(AuswertungKlientRequest) returns (AuswertungReply);
+}
+
+service ChangeKlientService {
+  rpc ChangeKlient(ChangeKlientRequest) returns (ChangeKlientReply);
+}
+
+service DeleteKlientService {
+  rpc DeleteKlient(DeleteKlientRequest) returns (DeleteKlientReply);
+}
+
+service SetNewKlientService {
+  rpc SetNewKlient(SetNewKlientRequest) returns (SetNewKlientReply);
+}
+
+service GetKlientenService {
+  rpc GetKlienten(GetKlientenRequest) returns (GetKlientenReply);
 }
 
 
@@ -369,6 +397,14 @@ message SetRechteReply {
   string error_code = 1;
 }
 
+message ChangeRolleRequest {
+  IdObjekt rolle = 1;
+}
+
+message ChangeRolleReply {
+  string error_code = 1;
+}
+
 message ChangeKategorieRequest {
   IdObjekt kategorie = 1;
 }
@@ -385,6 +421,14 @@ message ChangeGruppeReply {
   string error_code = 1;
 }
 
+message DeleteRolleRequest {
+  IdObjekt rolle = 1;
+}
+
+message DeleteRolleReply {
+  string error_code = 1;
+}
+
 message DeleteKategorieRequest {
   IdObjekt kategorie = 1;
 }
@@ -398,6 +442,14 @@ message DeleteGruppeRequest {
 }
 
 message DeleteGruppeReply {
+  string error_code = 1;
+}
+
+message SetNewRolleRequest {
+  IdObjekt rolle = 1;
+}
+
+message SetNewRolleReply {
   string error_code = 1;
 }
 
@@ -442,6 +494,7 @@ message SetNewTaetigkeitReply {
 }
 
 message GetBetreuungenRequest {
+  bool aktiv = 1;
 }
 
 message GetBetreuungenReply {
@@ -484,4 +537,35 @@ message AuswertungKlientRequest {
 
 message AuswertungReply {
   repeated Auswertung auswertung = 1;
+}
+
+message ChangeKlientRequest {
+  Klient klient = 1;
+}
+
+message ChangeKlientReply {
+  string error_code = 1;
+}
+
+message DeleteKlientRequest {
+  int64 klientId = 1;
+}
+
+message DeleteKlientReply {
+  string error_code = 1;
+}
+
+message SetNewKlientRequest {
+  Klient klient = 1;
+}
+
+message SetNewKlientReply {
+  string error_code = 1;
+}
+
+message GetKlientenRequest {
+}
+
+message GetKlientenReply {
+  repeated Klient klientenList = 1;
 }

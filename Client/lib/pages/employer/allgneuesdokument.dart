@@ -8,14 +8,14 @@ import 'package:fixnum/fixnum.dart' as fn;
 import 'dart:typed_data';
 import 'package:management_triangel/src/generated/triangel.pb.dart';
 
-class NeuesDokumentScreen extends StatefulWidget {
-  const NeuesDokumentScreen({super.key});
+class AllgemeinesNeuesDokumentScreen extends StatefulWidget {
+  const AllgemeinesNeuesDokumentScreen({super.key});
 
   @override
-  State<NeuesDokumentScreen> createState() => _NeuesDokumentState();
+  State<AllgemeinesNeuesDokumentScreen> createState() => _AllgemeinesNeuesDokumentState();
 }
 
-class _NeuesDokumentState extends State<NeuesDokumentScreen>{
+class _AllgemeinesNeuesDokumentState extends State<AllgemeinesNeuesDokumentScreen>{
 
   
   final _fileUploadNameController = TextEditingController();
@@ -27,23 +27,6 @@ class _NeuesDokumentState extends State<NeuesDokumentScreen>{
     _fileUploadNameController.dispose();
     _fileNameController.dispose();
     super.dispose();
-  }
-
-  DropdownMenu<String> _buildChildDropdown() {
-    return DropdownMenu<String>(
-      expandedInsets: EdgeInsets.zero,
-      dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-          childList.map<DropdownMenuEntry<String>>(
-              (String name) => DropdownMenuEntry<String>(
-                  value: name, label: name))),
-      enabled: childList.length > 1,
-      initialSelection: childList.isNotEmpty ? childList.first : null,
-      onSelected: (value) {
-        if(value != null){
-          selectedChild = childListId.elementAt(childList.indexOf(value));
-        }
-      },
-    );
   }
 
   DropdownMenu<String> _buildGroupDropdown() {
@@ -106,7 +89,7 @@ class _NeuesDokumentState extends State<NeuesDokumentScreen>{
       name: _fileUploadNameController.text,
       gruppe: IdObjekt(
           id: fn.Int64(selectedDocumentGroup)),
-      klient: fn.Int64(selectedChild),
+      klient: fn.Int64(0),
     );
 
     for (int i = 0; i < selectedCategories.length; i++) {
@@ -124,7 +107,7 @@ class _NeuesDokumentState extends State<NeuesDokumentScreen>{
         rc = 0;
         await globalGrpcClient.sendDocument(setDoc, preppedFile);
         if (mounted) {
-          Navigator.of(context).pushNamed('/dokuments');
+          Navigator.of(context).pushNamed('/allgdokumente');
         }
       }
     }
@@ -168,18 +151,7 @@ class _NeuesDokumentState extends State<NeuesDokumentScreen>{
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(
-            flex: 1,
-            child: Row(
-              children: [
-                const Spacer(flex: 9),
-                Expanded(
-                  flex: 2,
-                  child: _buildChildDropdown(),
-                ),
-              ],
-            ),
-          ),
+          Spacer(flex: 2),
           Expanded(
             flex: 7,
             child: Row(
@@ -258,7 +230,7 @@ class _NeuesDokumentState extends State<NeuesDokumentScreen>{
                   flex: 3,
                   child: FilledButton(
                     onPressed: () {
-                      Navigator.of(context).pushNamed('/dokuments');
+                      Navigator.of(context).pushNamed('/allgdokumente');
                     },
                     child: const Text('Abbrechen'),
                   ),
@@ -290,7 +262,6 @@ class _NeuesDokumentState extends State<NeuesDokumentScreen>{
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildChildDropdown(),
             const SizedBox(height: 12),
             _buildGroupDropdown(),
             const SizedBox(height: 12),
@@ -329,7 +300,7 @@ class _NeuesDokumentState extends State<NeuesDokumentScreen>{
                 Expanded(
                   child: FilledButton(
                     onPressed: () {
-                      Navigator.of(context).pushNamed('/dokuments');
+                      Navigator.of(context).pushNamed('/allgdokumente');
                     },
                     child: const Text('Abbrechen'),
                   ),

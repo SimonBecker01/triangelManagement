@@ -322,8 +322,9 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
   }
 
   Future<void> _createNew() async {
+    ZeiteintragReply rep = ZeiteintragReply(errorCode: "");
     try {
-      await globalGrpcClient.saveZeiteintrag(
+      rep = await globalGrpcClient.saveZeiteintrag(
           Zeiteintrag(
               dayofentry: Datum(
                   year: currSelDate.year,
@@ -340,8 +341,8 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
         showDialog(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            title: const Text('Überschneidung'),
-            content: const Text('Überschneidung mit bestehendem Eintrag!'),
+            title: const Text('Eintrag nicht möglich'),
+            content: Text(rep.errorCode),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(),
