@@ -8,7 +8,7 @@
 namespace db::resolved {
 
 struct User {
-    uint64_t id;
+    uint64_t id = 0;
     std::string login;
     std::string lastName;
     std::string firstName;
@@ -19,27 +19,27 @@ struct User {
 };
 
 struct Klient {
-    uint64_t id;
+    uint64_t id = 0;
     std::string lastName;
     std::string firstName;
 };
 
 struct Betreuung {
-    uint64_t id;
+    uint64_t id = 0;
     std::string betreuerName;
     std::string klientName;
     std::string gueltigVon;
     std::string gueltigBis;
-    uint64_t stundenlohn;
-    uint64_t wochenstunden;
+    uint64_t stundenlohn = 0;
+    uint64_t wochenstunden = 0;
 };
 
 struct Dokument {
-    uint64_t id;
+    uint64_t id = 0;
     std::string name;
     std::string datei;
     std::string klientName;
-    uint64_t gruppeId;
+    uint64_t gruppeId = 0;
     std::string gruppeName;
     std::vector<uint64_t> kategorieId;
     std::vector<std::string> kategorieName;
@@ -53,32 +53,13 @@ struct RolePermissions {
     std::vector<std::string> allowedKategorien;
 };
 
-struct Vorlage {
-    uint64_t id;
-    std::string name;
-    std::string datei;
-};
-
-struct Variable {
-    uint64_t id;
-    std::string vorlageName;
-    std::string name;
-};
-
-struct VariablenWert {
-    uint64_t id;
-    std::string variableName;
-    uint64_t dokumentId;
-    std::string wert;
-};
-
 struct Zeiterfassung {
-    uint64_t id;
-    uint64_t betreuungId;
+    uint64_t id = 0;
+    uint64_t betreuungId = 0;
     std::string betreuerName;
     std::string klientName;
     std::string taetigkeitName;
-    bool istAbrechenbar;
+    bool istAbrechenbar = false;
     std::string von;
     std::string bis;
     std::string beschreibung;

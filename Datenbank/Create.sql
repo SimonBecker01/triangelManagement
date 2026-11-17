@@ -97,8 +97,8 @@ CREATE TABLE `Taetigkeit`(
 ALTER TABLE
     `Taetigkeit` ADD UNIQUE `taetigkeit_name_unique`(`Name`);
 CREATE TABLE `Kategorienzuordnung`(
-    `Kategorie` BIGINT NOT NULL,
-    `Dokument` BIGINT NOT NULL,
+    `Kategorie` BIGINT UNSIGNED NOT NULL,
+    `Dokument` BIGINT UNSIGNED NOT NULL,
     PRIMARY KEY(`Kategorie`, `Dokument`)
 );
 CREATE TABLE `Systemeinstellungen`(

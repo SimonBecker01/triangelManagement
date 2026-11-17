@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:grpc/grpc.dart';
 import 'package:management_triangel/global.dart';
@@ -25,6 +24,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _loggingIn = false;
 
+  static Color _serverColor(Color fallback, int r, int g, int b) {
+    if (r <= 0 && g <= 0 && b <= 0) return fallback;
+    return Color.fromRGBO(r, g, b, 1);
+  }
+
+  void _applyServerColors(Color light, Color dark) {
+    appTheme.setColors(
+      light: _serverColor(
+        appTheme.lightBG,
+        light.r.toInt(),
+        light.g.toInt(),
+        light.b.toInt(),
+      ),
+      dark: _serverColor(
+        appTheme.darkBG,
+        dark.r.toInt(),
+        dark.g.toInt(),
+        dark.b.toInt(),
+      ),
+    );
+  }
+
   Future<void> _login() async {
     if (_loggingIn) return;
     if (_nameController.text.trim().isEmpty || _passController.text.isEmpty) {
@@ -34,29 +55,33 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loggingIn = true);
     _responseController.clear();
     try {
-      final loginResult =
-          await globalGrpcClient.login(_nameController.text, _passController.text);
+      final loginResult = await globalGrpcClient.login(_nameController.text, _passController.text);
 
       if (!mounted) return;
       if (loginResult.errorCode.isEmpty) {
+        if (loginResult.accessToken.isEmpty) {
+          throw StateError('Die Anmeldung enthielt kein Zugriffstoken.');
+        }
         loginName = _nameController.text;
+        currentUserRole = loginResult.role;
+        passwordResetRequired = loginResult.forceResetPass == 1;
 
         globalGrpcClient.setAuthToken(loginResult.accessToken);
-
-        darkBG = Color.fromRGBO(loginResult.darkbg.r, loginResult.darkbg.g, loginResult.darkbg.b, 1);
-        lightBG = Color.fromRGBO(loginResult.lightbg.r, loginResult.lightbg.g, loginResult.lightbg.b, 1);
+        
+        
+        _applyServerColors(Color.fromRGBO(loginResult.lightbg.r, loginResult.lightbg.g, loginResult.lightbg.b, 1,),Color.fromRGBO(loginResult.darkbg.r, loginResult.darkbg.g, loginResult.darkbg.b, 1,),);
 
         childList.clear();
         childListId.clear();
 
         for (int i = 0; i < loginResult.klienten.length; i++) {
-          childList.add(loginResult.klienten.elementAt(i).fname + loginResult.klienten.elementAt(i).nname);
+          childList.add(
+            '${loginResult.klienten.elementAt(i).fname} ${loginResult.klienten.elementAt(i).nname}',
+          );
           childListId.add(loginResult.klienten.elementAt(i).id.toInt());
         }
 
-        if (childList.isNotEmpty) {
-          selectedChild = childListId.first;
-        }
+        selectedChild = childListId.isNotEmpty ? childListId.first : 0;
 
         final docConfigResult = await globalGrpcClient.getDocumentConfig();
         if (!mounted) return;
@@ -88,38 +113,32 @@ class _LoginScreenState extends State<LoginScreen> {
           activityListId.add(taetigkeitenResult.taetigkeiten.elementAt(i).id.toInt());
         }
 
-        if (activityList.isNotEmpty) {
-          selectedActivity = activityListId.first;
-        }
+        selectedActivity = activityListId.isNotEmpty ? activityListId.first : 0;
 
         if (mounted) {
-          if(loginResult.role == 1){
-            Navigator.of(context).pushNamed('/employermenu');
-          }else{
-            if(loginResult.role == 99){
-              _responseController.text = "Nutzer gesperrt!";
-            }else{
-              if(loginResult.forceResetPass == 1){
-                Navigator.of(context).pushNamed('/changepass');
-              }else{
-                Navigator.of(context).pushNamed('/menu');
-              }
-            }
+          // A required password change takes priority for every role.
+          _passController.clear();
+          if (passwordResetRequired) {
+            Navigator.of(context).pushNamed('/changepass');
+          } else {
+            Navigator.of(context).pushNamed(loginResult.role == 1 ? '/employermenu' : '/menu');
           }
         }
       } else {
+        clearSession();
         _responseController.text = loginResult.errorCode;
       }
     } catch (error) {
       // Never leave a partially initialized authenticated session behind.
-      globalGrpcClient.setAuthToken('');
+      clearSession();
       if (!mounted) return;
       if (error is GrpcError && error.code == StatusCode.unauthenticated) {
         _responseController.text = 'Benutzername oder Passwort ist falsch.';
       } else if (error is GrpcError && error.code == StatusCode.permissionDenied) {
         _responseController.text = 'Zugriff verweigert.';
       } else {
-        _responseController.text = 'Anmeldung fehlgeschlagen. Bitte Verbindung prüfen und erneut versuchen.';
+        _responseController.text =
+            'Anmeldung fehlgeschlagen. Bitte Verbindung prüfen und erneut versuchen.';
       }
       _passController.clear();
     } finally {
@@ -155,8 +174,8 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Spacer(flex: 3),
                 Expanded(
-                  flex : 2,
-                  child : TextField(
+                  flex: 2,
+                  child: TextField(
                     controller: _nameController,
                     decoration: const InputDecoration(
                       border: OutlineInputBorder(),
@@ -166,8 +185,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const Spacer(flex: 2),
                 Expanded(
-                  flex : 2,
-                  child : TextField(
+                  flex: 2,
+                  child: TextField(
                     controller: _passController,
                     obscureText: true,
                     decoration: const InputDecoration(
@@ -185,10 +204,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const Spacer(flex: 3),
-                Expanded(
-                  flex: 2,
-                  child: TextField(controller: _responseController),
-                ),
+                Expanded(flex: 2, child: TextField(controller: _responseController)),
               ],
             ),
           ),

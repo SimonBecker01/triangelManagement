@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily check for the 5-days-before-month-end Triangel reminder
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

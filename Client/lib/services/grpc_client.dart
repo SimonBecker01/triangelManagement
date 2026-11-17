@@ -50,7 +50,8 @@ class GrpcClient {
   DeleteKlientServiceClient? _deleteKlient;
   SetNewKlientServiceClient? _setNewKlient;
   GetKlientenServiceClient? _getKlienten;
-  
+  GetSettingsServiceClient? _getSettings;
+  SetSettingsServiceClient? _setSettings;
 
   bool get isConnected => _channel != null;
 
@@ -58,14 +59,19 @@ class GrpcClient {
     String host = 'allebescheuert.de',
     int port = 50051,
     bool useTls = true,
+    List<int>? trustedCertificates,
   }) async {
+    if (!useTls) throw ArgumentError('TLS is required for Triangel connections.');
+    if (host.trim().isEmpty || port < 1 || port > 65535) {
+      throw ArgumentError('Invalid gRPC host or port.');
+    }
     await disconnect();
     final channel = ClientChannel(
       host,
       port: port,
       options: ChannelOptions(
-      //Not using a secure channel is simply not an option at all
-        credentials: const ChannelCredentials.secure(),
+        // A private CA may be supplied explicitly; insecure channels are forbidden.
+        credentials: ChannelCredentials.secure(certificates: trustedCertificates),
       ),
     );
     _channel = channel;
@@ -108,10 +114,13 @@ class GrpcClient {
     _deleteKlient = DeleteKlientServiceClient(channel);
     _setNewKlient = SetNewKlientServiceClient(channel);
     _getKlienten = GetKlientenServiceClient(channel);
+    _getSettings = GetSettingsServiceClient(channel);
+    _setSettings = SetSettingsServiceClient(channel);
   }
 
   Future<void> disconnect() async {
-    await _channel?.shutdown();
+    // Clear local credentials even if closing the old channel throws.
+    final oldChannel = _channel;
     _channel = null;
     _authToken = null;
     _auth = null;
@@ -153,8 +162,11 @@ class GrpcClient {
     _deleteKlient = null;
     _setNewKlient = null;
     _getKlienten = null;
+    _getSettings = null;
+    _setSettings = null;
+    await oldChannel?.shutdown();
   }
-  
+
   void setAuthToken(String token) => _authToken = token;
 
   String? get authToken => _authToken;
@@ -163,7 +175,10 @@ class GrpcClient {
     final token = _authToken;
     return token == null || token.isEmpty
         ? CallOptions(timeout: const Duration(seconds: 30))
-        : CallOptions(timeout: const Duration(seconds: 30), metadata: {'authorization': 'Bearer $token'});
+        : CallOptions(
+            timeout: const Duration(seconds: 30),
+            metadata: {'authorization': 'Bearer $token'},
+          );
   }
 
   T _use<T>(T? stub, String name) {
@@ -173,237 +188,239 @@ class GrpcClient {
     return stub;
   }
 
-  Future<LoginReply> login(String username, String password) =>
-      _use(_auth, 'login')
-          .login(LoginRequest()..username = username..password = password,
-              options: _opts());
+  Future<LoginReply> login(String username, String password) => _use(_auth, 'login').login(
+    LoginRequest()
+      ..username = username
+      ..password = password,
+    options: _opts(),
+  );
 
-  Future<DocumentConfigReply> getDocumentConfig() =>
-      _use(_documentConfig, 'getDocumentConfig')
-          .getDocumentConfig(DocumentConfigRequest(), options: _opts());
+  Future<DocumentConfigReply> getDocumentConfig() => _use(
+    _documentConfig,
+    'getDocumentConfig',
+  ).getDocumentConfig(DocumentConfigRequest(), options: _opts());
 
-  Future<DocumentsReply> getDocuments(Int64 klientid) =>
-      _use(_documents, 'getDocuments')
-          .getDocuments(DocumentsRequest()..klientid = klientid,
-              options: _opts());
+  Future<DocumentsReply> getDocuments(Int64 klientid) => _use(
+    _documents,
+    'getDocuments',
+  ).getDocuments(DocumentsRequest()..klientid = klientid, options: _opts());
 
-  Future<DocumentReply> getDocument(Dokument dokument) =>
-      _use(_document, 'getDocument')
-          .getDocument(DocumentRequest()..dokument = dokument,
-              options: _opts());
+  Future<DocumentReply> getDocument(Dokument dokument) => _use(
+    _document,
+    'getDocument',
+  ).getDocument(DocumentRequest()..dokument = dokument, options: _opts());
 
-  Future<DeleteDocumentReply> deleteDocument(Dokument dokument) =>
-      _use(_deleteDocument, 'deleteDocument')
-          .deleteDocument(DeleteDocumentRequest()..dokument = dokument,
-              options: _opts());
+  Future<DeleteDocumentReply> deleteDocument(Dokument dokument) => _use(
+    _deleteDocument,
+    'deleteDocument',
+  ).deleteDocument(DeleteDocumentRequest()..dokument = dokument, options: _opts());
 
   Future<SendDocumentReply> sendDocument(Dokument dokument, List<int> file) =>
-      _use(_sendDocument, 'sendDocument')
-          .sendDocument(SendDocumentRequest()
-            ..dokument = dokument
-            ..file = file, options: _opts());
+      _use(_sendDocument, 'sendDocument').sendDocument(
+        SendDocumentRequest()
+          ..dokument = dokument
+          ..file = file,
+        options: _opts(),
+      );
 
   Future<TaetigkeitReply> getTaetigkeiten() =>
-      _use(_taetigkeit, 'taetigkeit')
-          .taetigkeit(TaetigkeitRequest(), options: _opts());
+      _use(_taetigkeit, 'taetigkeit').taetigkeit(TaetigkeitRequest(), options: _opts());
 
-  Future<ZeiteintraegeReply> getZeiteintraege(Datum datum) =>
-      _use(_zeiteintraege, 'zeiteintraege')
-          .zeiteintraege(ZeiteintraegeRequest()..zeiteintragdatum = datum,
-              options: _opts());
+  Future<ZeiteintraegeReply> getZeiteintraege(Datum datum) => _use(
+    _zeiteintraege,
+    'zeiteintraege',
+  ).zeiteintraege(ZeiteintraegeRequest()..zeiteintragdatum = datum, options: _opts());
 
   Future<ZeiteintragReply> saveZeiteintrag(Zeiteintrag zeiteintrag, int operation) =>
-      _use(_zeiteintrag, 'zeiteintrag')
-          .zeiteintrag(ZeiteintragRequest()
-            ..zeiteintrag = zeiteintrag
-            ..operation = operation,
-              options: _opts());
+      _use(_zeiteintrag, 'zeiteintrag').zeiteintrag(
+        ZeiteintragRequest()
+          ..zeiteintrag = zeiteintrag
+          ..operation = operation,
+        options: _opts(),
+      );
 
-  Future<PasswordChangeReply> changePassword(
-    String oldPassword,
-    String newPassword,
-  ) =>
+  Future<PasswordChangeReply> changePassword(String oldPassword, String newPassword) =>
       _use(_passwordChange, 'passwordChange').passwordChange(
-          PasswordChangeRequest()
-            ..oldPassword = oldPassword
-            ..newPassword = newPassword,
-          options: _opts());
+        PasswordChangeRequest()
+          ..oldPassword = oldPassword
+          ..newPassword = newPassword,
+        options: _opts(),
+      );
 
-  Future<CreateUserReply> createUser(UserObjekt newUser) =>
-      _use(_createUser, 'createUser')
-          .createUser(CreateUserRequest()
-            ..newUser = newUser, options: _opts());
+  Future<CreateUserReply> createUser(UserObjekt newUser) => _use(
+    _createUser,
+    'createUser',
+  ).createUser(CreateUserRequest()..newUser = newUser, options: _opts());
 
   Future<GetUsersReply> getUsers() =>
-      _use(_getUsers, 'getUsers')
-          .getUsers(GetUsersRequest(),
-              options: _opts());
+      _use(_getUsers, 'getUsers').getUsers(GetUsersRequest(), options: _opts());
 
   Future<GetRolesReply> getRoles() =>
-      _use(_getRoles, 'getRoles')
-          .getRoles(GetRolesRequest(),
-              options: _opts());
+      _use(_getRoles, 'getRoles').getRoles(GetRolesRequest(), options: _opts());
 
   Future<ChangeUserReply> changeUser(UserObjekt changedUser, int forceReset) =>
-      _use(_changeUser, 'changeUser')
-          .changeUser(ChangeUserRequest()
-            ..changedUser = changedUser
-            ..forceReset = forceReset
-            , options: _opts());
+      _use(_changeUser, 'changeUser').changeUser(
+        ChangeUserRequest()
+          ..changedUser = changedUser
+          ..forceReset = forceReset,
+        options: _opts(),
+      );
 
-  Future<GetRechteKategorienReply> getRechteKategorien() =>
-      _use(_getRechteKategorien, 'getRechteKategorien')
-          .getRechteKategorien(GetRechteKategorienRequest()
-            , options: _opts());
+  Future<GetRechteKategorienReply> getRechteKategorien() => _use(
+    _getRechteKategorien,
+    'getRechteKategorien',
+  ).getRechteKategorien(GetRechteKategorienRequest(), options: _opts());
 
-  Future<GetRechteGruppeReply> getRechteGruppe() =>
-      _use(_getRechteGruppe, 'getRechteGruppe')
-          .getRechteGruppe(GetRechteGruppeRequest()
-            , options: _opts());
+  Future<GetRechteGruppeReply> getRechteGruppe() => _use(
+    _getRechteGruppe,
+    'getRechteGruppe',
+  ).getRechteGruppe(GetRechteGruppeRequest(), options: _opts());
 
-  Future<SetRechteReply> setRechte(Int64 rollenId, List<Int64> gruppenId, List<Int64> kategorienId) =>
-      _use(_setRechte, 'setRechte')
-          .setRechte(SetRechteRequest()
-            ..rollenId = rollenId
-            //..gruppenId = gruppenId
-            //..kategorienId = kategorienId
-            , options: _opts());
+  Future<SetRechteReply> setRechte(
+    Int64 rollenId,
+    List<Int64> gruppenId,
+    List<Int64> kategorienId,
+  ) => _use(_setRechte, 'setRechte').setRechte(
+    SetRechteRequest()
+      ..rollenId = rollenId
+      ..gruppenId.addAll(gruppenId)
+      ..kategorienId.addAll(kategorienId),
+    options: _opts(),
+  );
 
-  Future<ChangeRolleReply> changeRolle(IdObjekt rolle) =>
-      _use(_changeRolle, 'changeRolle')
-          .changeRolle(ChangeRolleRequest()
-            ..rolle = rolle
-            , options: _opts());
+  Future<ChangeRolleReply> changeRolle(IdObjekt rolle) => _use(
+    _changeRolle,
+    'changeRolle',
+  ).changeRolle(ChangeRolleRequest()..rolle = rolle, options: _opts());
 
-  Future<ChangeKategorieReply> changeKategorie(IdObjekt kategorie) =>
-      _use(_changeKategorie, 'changeKategorie')
-          .changeKategorie(ChangeKategorieRequest()
-            ..kategorie = kategorie
-            , options: _opts());
+  Future<ChangeKategorieReply> changeKategorie(IdObjekt kategorie) => _use(
+    _changeKategorie,
+    'changeKategorie',
+  ).changeKategorie(ChangeKategorieRequest()..kategorie = kategorie, options: _opts());
 
-  Future<ChangeGruppeReply> changeGruppe(IdObjekt gruppe) =>
-      _use(_changeGruppe, 'changeKategorie')
-          .changeGruppe(ChangeGruppeRequest()
-            ..gruppe = gruppe
-            , options: _opts());
+  Future<ChangeGruppeReply> changeGruppe(IdObjekt gruppe) => _use(
+    _changeGruppe,
+    'changeKategorie',
+  ).changeGruppe(ChangeGruppeRequest()..gruppe = gruppe, options: _opts());
 
-  Future<DeleteRolleReply> deleteRolle(IdObjekt rolle) =>
-      _use(_deleteRolle, 'deleteRolle')
-          .deleteRolle(DeleteRolleRequest()
-            ..rolle = rolle
-            , options: _opts());
+  Future<DeleteRolleReply> deleteRolle(IdObjekt rolle) => _use(
+    _deleteRolle,
+    'deleteRolle',
+  ).deleteRolle(DeleteRolleRequest()..rolle = rolle, options: _opts());
 
-  Future<DeleteKategorieReply> deleteKategorie(IdObjekt kategorie) =>
-      _use(_deleteKategorie, 'deleteKategorie')
-          .deleteKategorie(DeleteKategorieRequest()
-            ..kategorie = kategorie
-            , options: _opts());
+  Future<DeleteKategorieReply> deleteKategorie(IdObjekt kategorie) => _use(
+    _deleteKategorie,
+    'deleteKategorie',
+  ).deleteKategorie(DeleteKategorieRequest()..kategorie = kategorie, options: _opts());
 
-  Future<DeleteGruppeReply> deleteGruppe(IdObjekt gruppe) =>
-      _use(_deleteGruppe, 'deleteKategorie')
-          .deleteGruppe(DeleteGruppeRequest()
-            ..gruppe = gruppe
-            , options: _opts());
+  Future<DeleteGruppeReply> deleteGruppe(IdObjekt gruppe) => _use(
+    _deleteGruppe,
+    'deleteKategorie',
+  ).deleteGruppe(DeleteGruppeRequest()..gruppe = gruppe, options: _opts());
 
-  Future<SetNewRolleReply> setNewRolle(IdObjekt rolle) =>
-      _use(_setNewRolle, 'setNewRolle')
-          .setNewRolle(SetNewRolleRequest()
-            ..rolle = rolle
-            , options: _opts());
+  Future<SetNewRolleReply> setNewRolle(IdObjekt rolle) => _use(
+    _setNewRolle,
+    'setNewRolle',
+  ).setNewRolle(SetNewRolleRequest()..rolle = rolle, options: _opts());
 
-  Future<SetNewKategorieReply> setNewKategorie(IdObjekt kategorie) =>
-      _use(_setNewKategorie, 'setNewKategorie')
-          .setNewKategorie(SetNewKategorieRequest()
-            ..kategorie = kategorie
-            , options: _opts());
+  Future<SetNewKategorieReply> setNewKategorie(IdObjekt kategorie) => _use(
+    _setNewKategorie,
+    'setNewKategorie',
+  ).setNewKategorie(SetNewKategorieRequest()..kategorie = kategorie, options: _opts());
 
-  Future<SetNewGruppeReply> setNewGruppe(IdObjekt gruppe) =>
-      _use(_setNewGruppe, 'setNewKategorie')
-          .setNewGruppe(SetNewGruppeRequest()
-            ..gruppe = gruppe
-            , options: _opts());
+  Future<SetNewGruppeReply> setNewGruppe(IdObjekt gruppe) => _use(
+    _setNewGruppe,
+    'setNewKategorie',
+  ).setNewGruppe(SetNewGruppeRequest()..gruppe = gruppe, options: _opts());
 
-  Future<ChangeTaetigkeitReply> changeTaetigkeit(Taetigkeit taetigkeit) =>
-      _use(_changeTaetigkeit, 'changeTaetigkeit')
-          .changeTaetigkeit(ChangeTaetigkeitRequest()
-            ..taetigkeit = taetigkeit
-            , options: _opts());
+  Future<ChangeTaetigkeitReply> changeTaetigkeit(Taetigkeit taetigkeit) => _use(
+    _changeTaetigkeit,
+    'changeTaetigkeit',
+  ).changeTaetigkeit(ChangeTaetigkeitRequest()..taetigkeit = taetigkeit, options: _opts());
 
-  Future<DeleteTaetigkeitReply> deleteTaetigkeit(Int64 taetigkeitId) =>
-      _use(_deleteTaetigkeit, 'deleteTaetigkeit')
-          .deleteTaetigkeit(DeleteTaetigkeitRequest()
-            ..taetigkeitId = taetigkeitId
-            , options: _opts());
+  Future<DeleteTaetigkeitReply> deleteTaetigkeit(Int64 taetigkeitId) => _use(
+    _deleteTaetigkeit,
+    'deleteTaetigkeit',
+  ).deleteTaetigkeit(DeleteTaetigkeitRequest()..taetigkeitId = taetigkeitId, options: _opts());
 
-  Future<SetNewTaetigkeitReply> setNewTaetigkeit(Taetigkeit taetigkeit) =>
-      _use(_setNewTaetigkeit, 'setNewTaetigkeit')
-          .setNewTaetigkeit(SetNewTaetigkeitRequest()
-            ..taetigkeit = taetigkeit
-            , options: _opts());
+  Future<SetNewTaetigkeitReply> setNewTaetigkeit(Taetigkeit taetigkeit) => _use(
+    _setNewTaetigkeit,
+    'setNewTaetigkeit',
+  ).setNewTaetigkeit(SetNewTaetigkeitRequest()..taetigkeit = taetigkeit, options: _opts());
 
-  Future<GetBetreuungenReply> getBetreuungen(bool aktiv) =>
-      _use(_getBetreuungen, 'getBetreuungen')
-          .getBetreuungen(GetBetreuungenRequest()
-            ..aktiv = aktiv
-            , options: _opts());
+  Future<GetBetreuungenReply> getBetreuungen(bool aktiv) => _use(
+    _getBetreuungen,
+    'getBetreuungen',
+  ).getBetreuungen(GetBetreuungenRequest()..aktiv = aktiv, options: _opts());
 
-  Future<EndBetreuungReply> endBetreuung(Int64 betreuungId) =>
-      _use(_endBetreuung, 'endBetreuung')
-          .endBetreuung(EndBetreuungRequest()
-            ..betreuungId = betreuungId
-            , options: _opts());
+  Future<EndBetreuungReply> endBetreuung(Int64 betreuungId) => _use(
+    _endBetreuung,
+    'endBetreuung',
+  ).endBetreuung(EndBetreuungRequest()..betreuungId = betreuungId, options: _opts());
 
-  Future<SetNewBetreuungReply> setNewBetreuung(Betreuung betreuung) =>
-      _use(_setNewBetreuung, 'setNewBetreuung')
-          .setNewBetreuung(SetNewBetreuungRequest()
-            ..betreuung = betreuung
-            , options: _opts());
+  Future<SetNewBetreuungReply> setNewBetreuung(Betreuung betreuung) => _use(
+    _setNewBetreuung,
+    'setNewBetreuung',
+  ).setNewBetreuung(SetNewBetreuungRequest()..betreuung = betreuung, options: _opts());
 
   Future<AuswertungReply> auswertungBetreuung(Int64 betreuung, Datum monat, bool abrechenbar) =>
-      _use(_auswertungBetreuung, 'auswertungBetreuung')
-          .auswertungBetreuung(AuswertungBetreuungRequest()
-            ..betreuung = betreuung
-            ..monat = monat
-            ..abrechenbar = abrechenbar
-            , options: _opts());
+      _use(_auswertungBetreuung, 'auswertungBetreuung').auswertungBetreuung(
+        AuswertungBetreuungRequest()
+          ..betreuung = betreuung
+          ..monat = monat
+          ..abrechenbar = abrechenbar,
+        options: _opts(),
+      );
 
   Future<AuswertungReply> auswertungBetreuer(Int64 betreuer, Datum monat, bool abrechenbar) =>
-      _use(_auswertungBetreuer, 'auswertungBetreuer')
-          .auswertungBetreuer(AuswertungBetreuerRequest()
-            ..betreuer = betreuer
-            ..monat = monat
-            ..abrechenbar = abrechenbar
-            , options: _opts());
+      _use(_auswertungBetreuer, 'auswertungBetreuer').auswertungBetreuer(
+        AuswertungBetreuerRequest()
+          ..betreuer = betreuer
+          ..monat = monat
+          ..abrechenbar = abrechenbar,
+        options: _opts(),
+      );
 
   Future<AuswertungReply> auswertungKlient(Int64 klient, Datum monat, bool abrechenbar) =>
-      _use(_auswertungKlient, 'auswertungKlient')
-          .auswertungKlient(AuswertungKlientRequest()
-            ..klient = klient
-            ..monat = monat
-            ..abrechenbar = abrechenbar
-            , options: _opts());
+      _use(_auswertungKlient, 'auswertungKlient').auswertungKlient(
+        AuswertungKlientRequest()
+          ..klient = klient
+          ..monat = monat
+          ..abrechenbar = abrechenbar,
+        options: _opts(),
+      );
 
-  Future<ChangeKlientReply> changeKlient(Klient klient) =>
-      _use(_changeKlient, 'changeKlient')
-          .changeKlient(ChangeKlientRequest()
-            ..klient = klient
-            , options: _opts());
+  Future<ChangeKlientReply> changeKlient(Klient klient) => _use(
+    _changeKlient,
+    'changeKlient',
+  ).changeKlient(ChangeKlientRequest()..klient = klient, options: _opts());
 
-  Future<DeleteKlientReply> deleteKlient(Int64 klientId) =>
-      _use(_deleteKlient, 'deleteKlient')
-          .deleteKlient(DeleteKlientRequest()
-            ..klientId = klientId
-            , options: _opts());
+  Future<DeleteKlientReply> deleteKlient(Int64 klientId) => _use(
+    _deleteKlient,
+    'deleteKlient',
+  ).deleteKlient(DeleteKlientRequest()..klientId = klientId, options: _opts());
 
-  Future<SetNewKlientReply> setNewKlient(Klient klient) =>
-      _use(_setNewKlient, 'setNewKlient')
-          .setNewKlient(SetNewKlientRequest()
-            ..klient = klient
-            , options: _opts());
+  Future<SetNewKlientReply> setNewKlient(Klient klient) => _use(
+    _setNewKlient,
+    'setNewKlient',
+  ).setNewKlient(SetNewKlientRequest()..klient = klient, options: _opts());
 
   Future<GetKlientenReply> getKlienten() =>
-      _use(_getKlienten, 'getKlienten')
-          .getKlienten(GetKlientenRequest(),
-              options: _opts());
+      _use(_getKlienten, 'getKlienten').getKlienten(GetKlientenRequest(), options: _opts());
 
+  Future<GetSettingsReply> getSettings(
+    List<String> names,
+  ) => _use(_getSettings, 'getSettings').getSettings(
+    GetSettingsRequest()
+      ..names.addAll(names),
+    options: _opts(),
+  );
+
+  Future<SetSettingsReply> setSettings(
+    List<Setting> settingsList,
+  ) => _use(_setSettings, 'setSettings').setSettings(
+    SetSettingsRequest()
+      ..settingsList.addAll(settingsList),
+    options: _opts(),
+  );
 }

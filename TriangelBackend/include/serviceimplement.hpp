@@ -284,4 +284,19 @@ namespace services {
             grpc::Status GetKlienten(grpc::ServerContext*, const triangel::GetKlientenRequest*, triangel::GetKlientenReply*) override;
         private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
     };
+    
+    class GetSettingsService final : public triangel::GetSettingsService::Service {
+        public:
+            GetSettingsService(DatabaseOperator&, const triangel::auth::JwtManager&);
+            grpc::Status GetSettings(grpc::ServerContext*, const triangel::GetSettingsRequest*, triangel::GetSettingsReply*) override;
+        private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
+    };
+    
+    class SetSettingsService final : public triangel::SetSettingsService::Service {
+        public:
+            SetSettingsService(DatabaseOperator&, const triangel::auth::JwtManager&);
+            grpc::Status SetSettings(grpc::ServerContext*, const triangel::SetSettingsRequest*, triangel::SetSettingsReply*) override;
+        private: DatabaseOperator& database_; const triangel::auth::JwtManager& jwt_;
+    };
+
 }

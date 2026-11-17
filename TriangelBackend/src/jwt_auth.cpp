@@ -6,7 +6,6 @@
 
 #include <array>
 #include <cstddef>
-#include <cstddef>
 #include <chrono>
 #include <regex>
 #include <stdexcept>
@@ -17,7 +16,10 @@ std::string base64UrlEncode(const unsigned char* input, std::size_t length) {
     std::string encoded(4 * ((length + 2) / 3), '\0');
     const int written = EVP_EncodeBlock(reinterpret_cast<unsigned char*>(encoded.data()), input,
                                         static_cast<int>(length));
-    encoded.resize(written);
+    if (written < 0) {
+        throw std::runtime_error("EVP_EncodeBlock failed");
+    }
+    encoded.resize(static_cast<std::size_t>(written));
     while (!encoded.empty() && encoded.back() == '=') encoded.pop_back();
     for (char& c : encoded) { if (c == '+') c = '-'; else if (c == '/') c = '_'; }
     return encoded;
@@ -60,16 +62,25 @@ std::string jsonEscape(const std::string& s) {
 }
 
 std::optional<std::string> jsonString(const std::string& json, const char* name) {
-    std::smatch match;
-    const std::regex pattern(std::string("\\\"") + name + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
-    if (!std::regex_search(json, match, pattern)) return std::nullopt;
-    return match[1].str();
+    try {
+        std::smatch match;
+        const std::regex pattern(std::string("\\\"") + name + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
+        if (!std::regex_search(json, match, pattern)) return std::nullopt;
+        return match[1].str();
+    } catch (...) {
+        return std::nullopt;
+    }
 }
+
 std::optional<std::int64_t> jsonInt(const std::string& json, const char* name) {
-    std::smatch match;
-    const std::regex pattern(std::string("\\\"") + name + "\\\"\\s*:\\s*(-?[0-9]+)");
-    if (!std::regex_search(json, match, pattern)) return std::nullopt;
-    try { return std::stoll(match[1].str()); } catch (...) { return std::nullopt; }
+    try {
+        std::smatch match;
+        const std::regex pattern(std::string("\\\"") + name + "\\\"\\s*:\\s*(-?[0-9]+)");
+        if (!std::regex_search(json, match, pattern)) return std::nullopt;
+        return std::stoll(match[1].str());
+    } catch (...) {
+        return std::nullopt;
+    }
 }
 } // namespace
 
@@ -95,21 +106,37 @@ std::string JwtManager::issue(std::int64_t user_id, const std::string& login) co
 }
 
 std::optional<Principal> JwtManager::verify(const std::string& token) const {
-    const auto first = token.find('.'); const auto second = token.find('.', first == std::string::npos ? first : first + 1);
-    if (first == std::string::npos || second == std::string::npos || token.find('.', second + 1) != std::string::npos) return std::nullopt;
-    const std::string signing_input = token.substr(0, second);
-    const std::string supplied_signature = token.substr(second + 1);
-    const std::string expected_signature = hmacSha256(signing_key_, signing_input);
-    if (supplied_signature.size() != expected_signature.size() ||
-        CRYPTO_memcmp(supplied_signature.data(), expected_signature.data(), expected_signature.size()) != 0) return std::nullopt;
-    const auto header = base64UrlDecode(token.substr(0, first));
-    const auto payload = base64UrlDecode(token.substr(first + 1, second - first - 1));
-    if (!header || !payload || *header != "{\"alg\":\"HS256\",\"typ\":\"JWT\"}") return std::nullopt;
-    const auto issuer = jsonString(*payload, "iss"), audience = jsonString(*payload, "aud"), subject = jsonString(*payload, "sub"), login = jsonString(*payload, "login");
-    const auto expires_at = jsonInt(*payload, "exp");
-    if (!issuer || !audience || !subject || !login || !expires_at || *issuer != issuer_ || *audience != audience_) return std::nullopt;
-    const auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-    if (*expires_at <= now) return std::nullopt;
-    try { return Principal{std::stoll(*subject), *login, *expires_at}; } catch (...) { return std::nullopt; }
+    try {
+        if (token.empty()) return std::nullopt;
+        const auto first = token.find('.');
+        const auto second = token.find('.', first == std::string::npos ? first : first + 1);
+        if (first == std::string::npos || second == std::string::npos || token.find('.', second + 1) != std::string::npos) {
+            return std::nullopt;
+        }
+        const std::string signing_input = token.substr(0, second);
+        const std::string supplied_signature = token.substr(second + 1);
+        const std::string expected_signature = hmacSha256(signing_key_, signing_input);
+        if (supplied_signature.size() != expected_signature.size() ||
+            CRYPTO_memcmp(supplied_signature.data(), expected_signature.data(), expected_signature.size()) != 0) {
+            return std::nullopt;
+        }
+        const auto header = base64UrlDecode(token.substr(0, first));
+        const auto payload = base64UrlDecode(token.substr(first + 1, second - first - 1));
+        if (!header || !payload || *header != "{\"alg\":\"HS256\",\"typ\":\"JWT\"}") return std::nullopt;
+        const auto issuer = jsonString(*payload, "iss"),
+                   audience = jsonString(*payload, "aud"),
+                   subject = jsonString(*payload, "sub"),
+                   login = jsonString(*payload, "login");
+        const auto expires_at = jsonInt(*payload, "exp");
+        if (!issuer || !audience || !subject || !login || !expires_at || *issuer != issuer_ || *audience != audience_) {
+            return std::nullopt;
+        }
+        const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        if (*expires_at <= now) return std::nullopt;
+        return Principal{std::stoll(*subject), *login, *expires_at};
+    } catch (...) {
+        return std::nullopt;
+    }
 }
 } // namespace triangel::auth

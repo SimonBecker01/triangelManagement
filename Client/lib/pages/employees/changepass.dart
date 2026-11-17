@@ -1,6 +1,5 @@
-
 import 'package:flutter/material.dart';
-import 'package:grpc/grpc.dart';
+import 'package:management_triangel/widgets/admin_ui.dart';
 import 'package:management_triangel/global.dart';
 
 class ChangePassScreen extends StatefulWidget {
@@ -25,45 +24,65 @@ class _ChangePassScreenState extends State<ChangePassScreen> {
     super.dispose();
   }
 
+  bool _changingPassword = false;
+
   Future<void> _changePass() async {
-    if(_passNewOneController.text == _passNewTwoController.text){
-      try {
-        final changePassResult =
-            await globalGrpcClient.changePassword(_passOldController.text, _passNewOneController.text);
-
-        if (changePassResult.errorCode.isEmpty) {
-
-          if (mounted) {
-            Navigator.of(context).pop();
-          }
-        } else {
-          _responseController.text = changePassResult.errorCode;
-        }
-      } catch (error) {
-        if (error is GrpcError && error.code == StatusCode.permissionDenied) {
-          _responseController.text = error.codeName;
-        }
-      }
-    }else{
-      _responseController.text = "Neues Passwort stimmt nicht überein!";
+    if (_changingPassword) return;
+    if (_passNewOneController.text.isEmpty ||
+        _passNewOneController.text != _passNewTwoController.text) {
+      _responseController.text = 'Neues Passwort ist leer oder stimmt nicht überein.';
+      return;
     }
-    
-    _passOldController.text = '';
-    _passNewOneController.text = '';
-    _passNewTwoController.text = '';
+    setState(() => _changingPassword = true);
+    try {
+      final reply = await globalGrpcClient.changePassword(
+        _passOldController.text,
+        _passNewOneController.text,
+      );
+      if (!mounted) return;
+      if (reply.errorCode.isNotEmpty) {
+        _responseController.text = reply.errorCode;
+      } else {
+        _passOldController.clear();
+        _passNewOneController.clear();
+        _passNewTwoController.clear();
+        if (passwordResetRequired) {
+          // Forced reset was reached directly from login, not from a menu.
+          passwordResetRequired = false;
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil(currentUserRole == 1 ? '/employermenu' : '/menu', (_) => false);
+        } else {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _responseController.text = requestErrorMessage(error);
+    } finally {
+      if (mounted) setState(() => _changingPassword = false);
+    }
+    if (!mounted) return;
+    _passOldController.clear();
+    _passNewOneController.clear();
+    _passNewTwoController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: standardAppBar(),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (useWideLayout(constraints)) {
-            return _buildWideLayout();
-          }
-          return _buildNarrowLayout();
-        },
+    return PopScope(
+      canPop: !passwordResetRequired,
+      child: Scaffold(
+        appBar: standardAppBar(actions: passwordResetRequired ? [logoutAction(context)] : []),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            if (useWideLayout(constraints)) {
+              return _buildWideLayout();
+            }
+            return _buildNarrowLayout();
+          },
+        ),
       ),
     );
   }
@@ -81,8 +100,8 @@ class _ChangePassScreenState extends State<ChangePassScreen> {
               children: [
                 const Spacer(flex: 3),
                 Expanded(
-                  flex : 2,
-                  child : TextField(
+                  flex: 2,
+                  child: TextField(
                     controller: _passOldController,
                     obscureText: true,
                     decoration: const InputDecoration(
@@ -93,8 +112,8 @@ class _ChangePassScreenState extends State<ChangePassScreen> {
                 ),
                 const Spacer(flex: 2),
                 Expanded(
-                  flex : 2,
-                  child : TextField(
+                  flex: 2,
+                  child: TextField(
                     controller: _passNewOneController,
                     obscureText: true,
                     decoration: const InputDecoration(
@@ -105,8 +124,8 @@ class _ChangePassScreenState extends State<ChangePassScreen> {
                 ),
                 const Spacer(flex: 2),
                 Expanded(
-                  flex : 2,
-                  child : TextField(
+                  flex: 2,
+                  child: TextField(
                     controller: _passNewTwoController,
                     obscureText: true,
                     decoration: const InputDecoration(
@@ -119,15 +138,12 @@ class _ChangePassScreenState extends State<ChangePassScreen> {
                 Expanded(
                   flex: 2,
                   child: FilledButton(
-                    onPressed: _changePass,
+                    onPressed: _changingPassword ? null : _changePass,
                     child: const Text('Passwort ändern'),
                   ),
                 ),
                 const Spacer(flex: 3),
-                Expanded(
-                  flex: 2,
-                  child: TextField(controller: _responseController),
-                ),
+                Expanded(flex: 2, child: TextField(controller: _responseController)),
               ],
             ),
           ),
@@ -176,7 +192,7 @@ class _ChangePassScreenState extends State<ChangePassScreen> {
               ),
               const SizedBox(height: 32),
               FilledButton(
-                onPressed: _changePass,
+                onPressed: _changingPassword ? null : _changePass,
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text('Passwort ändern'),

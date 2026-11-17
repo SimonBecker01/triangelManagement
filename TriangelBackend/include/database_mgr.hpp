@@ -3,7 +3,6 @@
 #include <string>
 #include <mysqlx/xdevapi.h>
 
-
 class DatabaseManager {
 public:
     DatabaseManager();

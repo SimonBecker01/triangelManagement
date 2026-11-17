@@ -14,12 +14,12 @@ public:
     ~DatabaseOperator();
     int createUser(const db::raw::User&, const std::string&);
     int checkUser(const std::string&, const std::string&, int64_t&, int32_t&, int32_t&);
-    
 
     int getKlienten(const int64_t, std::vector<db::raw::Klient>&);
     int getRoles(std::vector<std::pair<int8_t, std::string>>&);
     int getTimeBooked(const int32_t, const std::string&, std::vector<std::pair<int8_t, std::string>>&);
     int getSettingsValue(const std::string&, std::string&);
+    int setSettingsValue(const int64_t, const std::string&, const std::string&);
     int getGruppen(const int64_t, std::vector<db::raw::Gruppe>&);
     int getKategorien(const int64_t, std::vector<db::raw::Kategorie>&);
     int getDokumenteAuthor(const int64_t, const int64_t, std::vector<db::resolved::Dokument>&);
@@ -61,8 +61,6 @@ public:
     int deleteKlient(const int64_t, const db::raw::Klient&);
     int setNewKlient(const int64_t, const db::raw::Klient&);
     int getKlientenList(const int64_t, std::vector<db::raw::Klient>&);
-    
-
 
 private:
     std::string makeHash(const std::string&, const std::string&);

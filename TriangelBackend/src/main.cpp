@@ -7,6 +7,7 @@
 #include "database_ops.hpp"
 #include "serviceimplement.hpp"
 #include "utils.hpp"
+#include "utils_grpc.hpp"
 
 
 
@@ -70,8 +71,13 @@ int main() try {
     services::ChangeKlientService changeKlient_service(database, jwt);
     services::DeleteKlientService deleteKlient_service(database, jwt);
     services::SetNewKlientService setNewKlient_service(database, jwt);
+    services::GetKlientenService getKlienten_service(database, jwt);
+    services::GetSettingsService getSettings_service(database, jwt);
+    services::SetSettingsService setSettings_service(database, jwt);
 
     grpc::ServerBuilder builder;
+    builder.SetMaxReceiveMessageSize(22 * 1024 * 1024);
+    builder.SetMaxSendMessageSize(22 * 1024 * 1024);
 
     builder.AddListeningPort("0.0.0.0:50051", utils::tlsCredentials());
     builder.RegisterService(&auth_service);
@@ -112,6 +118,9 @@ int main() try {
     builder.RegisterService(&changeKlient_service);
     builder.RegisterService(&deleteKlient_service);
     builder.RegisterService(&setNewKlient_service);
+    builder.RegisterService(&getKlienten_service);
+    builder.RegisterService(&getSettings_service);
+    builder.RegisterService(&setSettings_service);
     auto server = builder.BuildAndStart();
     if (!server) throw std::runtime_error("gRPC server failed to start");
     std::cout << "TLS gRPC server listening on 0.0.0.0:50051\n";

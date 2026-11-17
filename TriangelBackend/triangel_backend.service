@@ -1,0 +1,72 @@
+[Unit]
+Description=Triangel Management Backend Service
+After=network-online.target mysql.service
+Wants=network-online.target
+StartLimitIntervalSec=60s
+StartLimitBurst=10
+
+
+[Service]
+Type=exec
+User=triangelservice
+Group=triangelservice
+SupplementaryGroups=ssl-cert
+UMask=0077
+
+ExecStart=/opt/triangelservice/triangelbackend
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+
+# --- Secrets ---------------------------------------------------------
+EnvironmentFile=/etc/triangelservice/triangelservice.env
+LoadCredentialEncrypted=jwt_secret:/etc/credstore.encrypted/jwt_secret
+LoadCredentialEncrypted=smtp_cred:/etc/credstore.encrypted/smtp_cred
+LoadCredentialEncrypted=smtp_usr:/etc/credstore.encrypted/smtp_usr
+LoadCredentialEncrypted=db_cred:/etc/credstore.encrypted/db_cred
+
+# --- Filesystem ------------------------------------------------------
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+StateDirectory=triangelservice
+StateDirectoryMode=0700
+ReadWritePaths=/mnt/drive_931G/documents
+InaccessiblePaths=-/media
+
+
+# --- Network ---------------------------------------------------------
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# --- Privileges ------------------------------------------------------
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete @cpu-emulation
+RestrictNamespaces=yes
+DevicePolicy=closed
+ProtectProc=invisible
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+RemoveIPC=yes
+RestrictFileSystems=
+SocketBindDeny=any
+SocketBindAllow=tcp:50051
+
+[Install]
+WantedBy=multi-user.target

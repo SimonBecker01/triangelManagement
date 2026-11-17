@@ -1,5 +1,5 @@
 name: management_triangel
-description: "A new Flutter project."
+description: "Triangel Management und Zeiterfassung"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.2+11
+version: 1.1.1+14
 
 environment:
   sdk: ^3.12.0
@@ -44,7 +44,9 @@ dependencies:
   speech_to_text_platform_interface: ^2.5.0
   pdf: ^3.13.1
   month_picker_dialog: ^6.7.3
+  intl: ^0.20.2
   flutter_colorpicker: ^1.1.0
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:

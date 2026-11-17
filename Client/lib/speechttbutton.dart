@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
@@ -15,7 +17,7 @@ class OnDeviceSpeechButton extends StatefulWidget {
     this.partialResults = true,
     this.icon = Icons.mic,
     this.listeningIcon = Icons.stop,
-    this.tooltip = 'Voice input (offline)',
+    this.tooltip = 'Voice input',
   });
 
   final SpeechResultListener onResult;
@@ -51,25 +53,55 @@ class _OnDeviceSpeechButtonState extends State<OnDeviceSpeechButton> {
   void initState() {
     super.initState();
 
-    _available = _service.checkAvailable(localeId: widget.localeId);
+    _available = _service.checkAvailable(localeId: widget.localeId).catchError((Object error) {
+      debugPrint('Speech recognition is unavailable: $error');
+      return false;
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_listening) {
+      // Stop platform callbacks before their owning screen is disposed.
+      unawaited(
+        _service.cancel().catchError((Object error) {
+          debugPrint('Speech cancellation failed: $error');
+        }),
+      );
+    }
+    super.dispose();
   }
 
   Future<void> _toggle() async {
-    if (_listening) {
-      await _service.stopListening();
+    try {
+      if (_listening) {
+        await _service.stopListening();
+        _setListening(false);
+        return;
+      }
+      final started = await _service.startListening(
+        onResult: widget.onResult,
+        onError: widget.onError,
+        onStatus: _handleStatus,
+        localeId: widget.localeId,
+        pauseFor: widget.pauseFor,
+        listenFor: widget.listenFor,
+        partialResults: widget.partialResults,
+      );
+      _setListening(started);
+      if (!started && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Spracherkennung konnte nicht gestartet werden.')),
+        );
+      }
+    } catch (error) {
       _setListening(false);
-      return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Spracherkennung ist derzeit nicht verfügbar.')),
+        );
+      }
     }
-    final started = await _service.startListening(
-      onResult: widget.onResult,
-      onError: widget.onError,
-      onStatus: _handleStatus,
-      localeId: widget.localeId,
-      pauseFor: widget.pauseFor,
-      listenFor: widget.listenFor,
-      partialResults: widget.partialResults,
-    );
-    _setListening(started);
   }
 
   void _handleStatus(String status) {

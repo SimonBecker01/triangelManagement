@@ -1,0 +1,64 @@
+[Unit]
+Description=Triangel Management Reminder Service
+After=network-online.target mysql.service
+Wants=network-online.target
+StartLimitIntervalSec=60s
+StartLimitBurst=10
+
+
+[Service]
+Type=oneshot
+User=triangelservice
+Group=triangelservice
+SupplementaryGroups=ssl-cert
+UMask=0077
+
+ExecCondition=/usr/local/lib/triangelservice/monthly-gate
+ExecStart=/opt/triangelservice/triangelreminder
+ExecStartPost=/usr/local/lib/triangelservice/mark-run
+
+# --- Secrets ---------------------------------------------------------
+EnvironmentFile=/etc/triangelservice/triangelservice.env
+LoadCredentialEncrypted=smtp_cred:/etc/credstore.encrypted/smtp_cred
+LoadCredentialEncrypted=smtp_usr:/etc/credstore.encrypted/smtp_usr
+LoadCredentialEncrypted=db_cred:/etc/credstore.encrypted/db_cred
+
+# --- Filesystem ------------------------------------------------------
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+StateDirectory=triangelservice
+StateDirectoryMode=0700
+
+
+# --- Network ---------------------------------------------------------
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# --- Privileges ------------------------------------------------------
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete @cpu-emulation
+RestrictNamespaces=yes
+DevicePolicy=closed
+ProtectProc=invisible
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+RemoveIPC=yes
+RestrictFileSystems=
+SocketBindDeny=any

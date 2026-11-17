@@ -4,7 +4,6 @@ import 'package:management_triangel/global.dart';
 class MenuEScreen extends StatelessWidget {
   const MenuEScreen({super.key});
 
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -26,14 +25,7 @@ class MenuEScreen extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Expanded(
-            flex: 1,
-            child: Row(
-              children: [
-                Spacer(flex: 9),
-              ],
-            ),
-          ),
+          const Expanded(flex: 1, child: Row(children: [Spacer(flex: 9)])),
           const Spacer(flex: 2),
           Expanded(
             flex: 3,
@@ -166,6 +158,15 @@ class MenuEScreen extends StatelessWidget {
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
                   child: Text('Dokumente'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Keep the narrow menu in parity with the wide menu.
+              FilledButton(
+                onPressed: () => Navigator.of(context).pushNamed('/allgdokumente'),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Allgemeine Dokumente'),
                 ),
               ),
               const SizedBox(height: 16),

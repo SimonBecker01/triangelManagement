@@ -4,7 +4,6 @@ import 'package:management_triangel/global.dart';
 class RechteverwaltungScreen extends StatelessWidget {
   const RechteverwaltungScreen({super.key});
 
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -26,14 +25,7 @@ class RechteverwaltungScreen extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Expanded(
-            flex: 1,
-            child: Row(
-              children: [
-                Spacer(flex: 9),
-              ],
-            ),
-          ),
+          const Expanded(flex: 1, child: Row(children: [Spacer(flex: 9)])),
           const Spacer(flex: 2),
           Expanded(
             flex: 3,

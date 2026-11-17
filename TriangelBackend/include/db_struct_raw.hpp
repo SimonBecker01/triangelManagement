@@ -3,108 +3,96 @@
 #include <string>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace db::raw {
 
     struct User {
-        uint64_t id;
+        uint64_t id = 0;
         std::string login;
         std::string lastName;
         std::string firstName;
         std::string email;
         std::string salt;
         std::string hash;
-        uint16_t role;
-        bool forceReset;
+        uint16_t role = 0;
+        bool forceReset = true;
     };
 
     struct Klient {
-        uint64_t id;
+        uint64_t id = 0;
         std::string lastName;
         std::string firstName;
     };
 
     struct Betreuung {
-        uint64_t id;
-        uint64_t betreuer;
-        uint64_t klient;
+        uint64_t id = 0;
+        uint64_t betreuer = 0;
+        uint64_t klient = 0;
         std::string gueltigVon;
         std::string gueltigBis;
-        uint64_t stundensatz;
-        uint64_t wochenstunden;
+        uint64_t stundensatz = 0;
+        uint64_t wochenstunden = 0;
     };
 
     struct Rolle {
-        uint16_t id;
+        uint16_t id = 0;
         std::string rolle;
     };
 
     struct Dokument {
-        uint64_t id;
+        uint64_t id = 0;
         std::string name;
         std::string datei;
-        uint64_t klient;
-        uint64_t gruppe;
+        uint64_t klient = 0;
+        uint64_t gruppe = 0;
         std::vector<uint64_t> kategorie;
-        uint64_t author;
+        uint64_t author = 0;
     };
 
     struct Kategorie {
-        uint64_t id;
+        uint64_t id = 0;
         std::string name;
     };
 
     struct Gruppe {
-        uint64_t id;
+        uint64_t id = 0;
         std::string name;
     };
 
     struct RechteGruppe {
-        uint64_t id;
-        uint16_t role;
-        uint64_t gruppe;
+        uint64_t id = 0;
+        uint16_t role = 0;
+        uint64_t gruppe = 0;
     };
 
     struct RechteKategorie {
-        uint64_t id;
-        uint16_t role;
-        uint64_t kategorie;
+        uint64_t id = 0;
+        uint16_t role = 0;
+        uint64_t kategorie = 0;
     };
 
-    struct Vorlage {
-        uint64_t id;
+    struct Setting {
+        uint64_t id = 0;
         std::string name;
-        std::string datei;
-    };
-
-    struct Variable {
-        uint64_t id;
-        uint64_t vorlage;
-        std::string name;
-    };
-
-    struct VariablenWert {
-        uint64_t id;
-        uint64_t variable;
-        uint64_t dokument;
         std::string wert;
     };
 
     struct Zeiterfassung {
-        uint64_t id;
-        uint64_t betreuung;
-        uint64_t klient;
-        uint64_t taetigkeit;
+        uint64_t id = 0;
+        uint64_t betreuung = 0;
+        uint64_t klient = 0;
+        uint64_t taetigkeit = 0;
         std::string von;
         std::string bis;
         std::string beschreibung;
     };
 
     struct Taetigkeit {
-        uint64_t id;
+        uint64_t id = 0;
         std::string name;
-        bool abrechenbar;
-        bool buchbar;
+        bool abrechenbar = false;
+        bool buchbar = false;
     };
 
 } // namespace db::raw

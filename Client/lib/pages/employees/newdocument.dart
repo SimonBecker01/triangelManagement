@@ -1,11 +1,16 @@
+import 'package:management_triangel/widgets/admin_ui.dart';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:management_triangel/global.dart';
 import 'package:file_picker/file_picker.dart';
+
 import 'dart:io';
+
 import 'package:fixnum/fixnum.dart' as fn;
+
 import 'dart:typed_data';
+
 import 'package:management_triangel/src/generated/triangel.pb.dart';
 
 class NewDocumentScreen extends StatefulWidget {
@@ -15,12 +20,23 @@ class NewDocumentScreen extends StatefulWidget {
   State<NewDocumentScreen> createState() => _NewDocumentState();
 }
 
-class _NewDocumentState extends State<NewDocumentScreen>{
-
-  
+class _NewDocumentState extends State<NewDocumentScreen> {
   final _fileUploadNameController = TextEditingController();
   final _fileNameController = TextEditingController();
   String shadowFilename = "";
+  Uint8List? _pickedBytes;
+  bool _uploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!documentGroupListId.contains(selectedDocumentGroup) && documentGroupListId.isNotEmpty) {
+      selectedDocumentGroup = documentGroupListId.first;
+    }
+    if (selectedCategories.isEmpty) selectedCategories.addAll(documentCategoryListId);
+    if (!childListId.contains(selectedChild) && childListId.isNotEmpty)
+      selectedChild = childListId.first;
+  }
 
   @override
   void dispose() {
@@ -33,13 +49,16 @@ class _NewDocumentState extends State<NewDocumentScreen>{
     return DropdownMenu<String>(
       expandedInsets: EdgeInsets.zero,
       dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-          childList.map<DropdownMenuEntry<String>>(
-              (String name) => DropdownMenuEntry<String>(
-                  value: name, label: name))),
+        childList.map<DropdownMenuEntry<String>>(
+          (String name) => DropdownMenuEntry<String>(value: name, label: name),
+        ),
+      ),
       enabled: childList.length > 1,
-      initialSelection: childList.isNotEmpty ? childList.first : null,
+      initialSelection: childListId.contains(selectedChild)
+          ? childList[childListId.indexOf(selectedChild)]
+          : (childList.isNotEmpty ? childList.first : null),
       onSelected: (value) {
-        if(value != null){
+        if (value != null) {
           selectedChild = childListId.elementAt(childList.indexOf(value));
         }
       },
@@ -50,16 +69,17 @@ class _NewDocumentState extends State<NewDocumentScreen>{
     return DropdownMenu<String>(
       expandedInsets: EdgeInsets.zero,
       dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-          documentGroupList.map<DropdownMenuEntry<String>>(
-              (String name) => DropdownMenuEntry<String>(
-                  value: name, label: name))),
+        documentGroupList.map<DropdownMenuEntry<String>>(
+          (String name) => DropdownMenuEntry<String>(value: name, label: name),
+        ),
+      ),
       enabled: documentGroupList.length > 1,
-      initialSelection:
-          documentGroupList.isNotEmpty ? documentGroupList.first : null,
+      initialSelection: documentGroupListId.contains(selectedDocumentGroup)
+          ? documentGroupList[documentGroupListId.indexOf(selectedDocumentGroup)]
+          : (documentGroupList.isNotEmpty ? documentGroupList.first : null),
       onSelected: (value) {
         if (value != null) {
-          selectedDocumentGroup =
-              documentGroupListId.elementAt(documentGroupList.indexOf(value));
+          selectedDocumentGroup = documentGroupListId.elementAt(documentGroupList.indexOf(value));
         }
       },
     );
@@ -77,8 +97,9 @@ class _NewDocumentState extends State<NewDocumentScreen>{
           onTap: () {
             setState(() {
               if (selectedCategories.contains(documentCategoryListId[index])) {
-                selectedCategories
-                    .removeAt(selectedCategories.indexOf(documentCategoryListId[index]));
+                selectedCategories.removeAt(
+                  selectedCategories.indexOf(documentCategoryListId[index]),
+                );
               } else {
                 selectedCategories.add(documentCategoryListId[index]);
               }
@@ -90,60 +111,71 @@ class _NewDocumentState extends State<NewDocumentScreen>{
   }
 
   Future<void> _pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles();
-
-    if (result != null) {
-      shadowFilename = result.files.single.path!;
-      _fileNameController.text = result.files.single.name;
-    } else {
-      // User canceled the picker
+    try {
+      final result = await FilePicker.platform.pickFiles(withData: true);
+      if (!mounted || result == null) return; // cancellation is not an error
+      final file = result.files.single;
+      if (file.size > 20 * 1024 * 1024) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Die Datei darf höchstens 20 MiB groß sein.')));
+        return;
+      }
+      setState(() {
+        _pickedBytes = file.bytes;
+        shadowFilename = file.path ?? '';
+        _fileNameController.text = file.name;
+      });
+    } catch (error) {
+      if (mounted) showRequestError(context, error);
     }
   }
 
   Future<void> _upload() async {
-    Dokument setDoc = Dokument(
-      author: loginName,
-      name: _fileUploadNameController.text,
-      gruppe: IdObjekt(
-          id: fn.Int64(selectedDocumentGroup)),
-      klient: fn.Int64(selectedChild),
-    );
-
-    for (int i = 0; i < selectedCategories.length; i++) {
-      setDoc.kategorie
-          .add(IdObjekt(id: fn.Int64(selectedCategories.elementAt(i))));
-    }
-
-    int rc = 1;
-
-    if (_fileUploadNameController.text.isNotEmpty ||
-        shadowFilename.isNotEmpty) {
-      final Uint8List preppedFile =
-          await File(shadowFilename).readAsBytes();
-      if (preppedFile.isNotEmpty) {
-        rc = 0;
-        await globalGrpcClient.sendDocument(setDoc, preppedFile);
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-      }
-    }
-
-    if (rc != 0 && mounted) {
-      showDialog(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Leerer Dateiname oder Pfad'),
-          content: const Text(
-              'Dateiname oder Pfad sind nicht eingetragen oder der Pfad nicht korrekt!'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('OK'),
-            ),
-          ],
+    if (_uploading) return;
+    final name = _fileUploadNameController.text.trim();
+    // A display name AND a chosen file are required; validate before file I/O.
+    if (name.isEmpty ||
+        name.length > 255 ||
+        (_pickedBytes == null && shadowFilename.isEmpty) ||
+        selectedDocumentGroup <= 0 ||
+        selectedCategories.isEmpty ||
+        selectedChild <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bitte Name, Datei, Gruppe und mindestens eine Kategorie auswählen.'),
         ),
       );
+      return;
+    }
+    setState(() => _uploading = true);
+    try {
+      final Uint8List bytes = _pickedBytes ?? await File(shadowFilename).readAsBytes();
+      if (!mounted) return;
+      if (bytes.isEmpty || bytes.length > 20 * 1024 * 1024) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Die Datei ist leer oder größer als 20 MiB.')));
+        return;
+      }
+      final document = Dokument(
+        author: loginName,
+        name: name,
+        gruppe: IdObjekt(id: fn.Int64(selectedDocumentGroup)),
+        klient: fn.Int64(selectedChild),
+      );
+      document.kategorie.addAll(selectedCategories.map((id) => IdObjekt(id: fn.Int64(id))));
+      final reply = await globalGrpcClient.sendDocument(document, bytes);
+      if (!mounted) return;
+      if (reply.errorCode.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reply.errorCode)));
+        return;
+      }
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (mounted) showRequestError(context, error);
+    } finally {
+      if (mounted) setState(() => _uploading = false);
     }
   }
 
@@ -173,10 +205,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
             child: Row(
               children: [
                 const Spacer(flex: 9),
-                Expanded(
-                  flex: 2,
-                  child: _buildChildDropdown(),
-                ),
+                Expanded(flex: 2, child: _buildChildDropdown()),
               ],
             ),
           ),
@@ -190,10 +219,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
                     children: [
                       const Expanded(
                         flex: 1,
-                        child: Text(
-                          'Kategorien',
-                          textAlign: TextAlign.center,
-                        ),
+                        child: Text('Kategorien', textAlign: TextAlign.center),
                       ),
                       Expanded(
                         flex: 11,
@@ -209,10 +235,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
                   flex: 3,
                   child: Column(
                     children: [
-                      Expanded(
-                        flex: 3,
-                        child: _buildGroupDropdown(),
-                      ),
+                      Expanded(flex: 3, child: _buildGroupDropdown()),
                       Expanded(
                         flex: 1,
                         child: FilledButton(
@@ -225,9 +248,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
                         child: TextField(
                           controller: _fileNameController,
                           enabled: false,
-                          decoration: const InputDecoration(
-                            border: OutlineInputBorder(),
-                          ),
+                          decoration: const InputDecoration(border: OutlineInputBorder()),
                         ),
                       ),
                       const Spacer(flex: 3),
@@ -267,7 +288,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
                 Expanded(
                   flex: 3,
                   child: FilledButton(
-                    onPressed: _upload,
+                    onPressed: _uploading ? null : _upload,
                     child: const Text('Anlegen'),
                   ),
                 ),
@@ -296,15 +317,9 @@ class _NewDocumentState extends State<NewDocumentScreen>{
             const SizedBox(height: 12),
             const Text('Kategorien', textAlign: TextAlign.center),
             const SizedBox(height: 8),
-            SizedBox(
-              height: 200,
-              child: _categoryListView(),
-            ),
+            SizedBox(height: 200, child: _categoryListView()),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _pickFile,
-              child: const Text('Datei auswählen'),
-            ),
+            FilledButton(onPressed: _pickFile, child: const Text('Datei auswählen')),
             const SizedBox(height: 12),
             TextField(
               controller: _fileNameController,
@@ -337,7 +352,7 @@ class _NewDocumentState extends State<NewDocumentScreen>{
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _upload,
+                    onPressed: _uploading ? null : _upload,
                     child: const Text('Anlegen'),
                   ),
                 ),

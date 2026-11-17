@@ -7,6 +7,7 @@
 #include <ctime>
 #include <curl/curl.h>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 #include "utils.hpp"
 
@@ -19,7 +20,7 @@ constexpr char kCodePlaceholder[] = "{code}";
 constexpr char kResetTemplate[] = "Ihr Account wurde neu erstellt oder sein Passwort zurueckgesetzt. Das neue Passwort ist : {code}";
 constexpr char kReminderBody[] =
     "Es wurden fuer diesen Monat bisher keine Arbeitszeiten eingetragen. Bitte pruefen sie dies auf Korrektheit.";
-// ================================================================
+constexpr char kReminderTemplate[] = "Folgende Betreuungen laufen in den nächsten 60 Tagen ohne Anschlußbetreuung aus : {code}";
 
 constexpr long kTimeoutSeconds = 30;
 
@@ -34,15 +35,13 @@ struct Upload {
 size_t payloadRead(char* ptr, size_t size, size_t nmemb, void* userp) {
     Upload* up = static_cast<Upload*>(userp);
     const size_t cap = size * nmemb;
-    if (up->pos >= up->len || cap == 0) return 0;
+    if (!up || up->pos >= up->len || cap == 0) return 0;
     const size_t n = std::min(up->len - up->pos, cap);
     memcpy(ptr, up->data + up->pos, n);
     up->pos += n;
     return n;
 }
 
-// `to` is the only external input, so this is the one check we keep:
-// must look like an address and must not contain CR/LF (header injection).
 bool validAddr(const std::string& s) {
     if (s.empty()) return false;
     if (s.find('\r') != std::string::npos || s.find('\n') != std::string::npos)
@@ -93,6 +92,7 @@ bool sendPayload(const SmtpConfig& config,
                  std::string* error_out) {
     auto fail = [&](const std::string& msg) {
         if (error_out) *error_out = msg;
+        std::cerr << "[Mailer Error] " << msg << std::endl;
         return false;
     };
 
@@ -111,6 +111,11 @@ bool sendPayload(const SmtpConfig& config,
     const std::string payload = buildPayload(config.host, config.username, to, subject, body);
 
     struct curl_slist* recipients = curl_slist_append(nullptr, rcptTo.c_str());
+    if (!recipients) {
+        curl_easy_cleanup(curl);
+        return fail("curl_slist_append() failed.");
+    }
+
     Upload up{payload.data(), payload.size()};
     char errbuf[CURL_ERROR_SIZE]{};
 
@@ -130,15 +135,14 @@ bool sendPayload(const SmtpConfig& config,
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, kTimeoutSeconds);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, kTimeoutSeconds + 30);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-    //curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
 
     const CURLcode res = curl_easy_perform(curl);
-    if (res != CURLE_OK && error_out) {
-        *error_out = "Send via " + url + " as '" + config.username + "' failed: " +
-                     (errbuf[0] ? errbuf : curl_easy_strerror(res));
-                     std::cerr << "Send via " + url + " as '" + config.username + "' failed: " +
-                     (errbuf[0] ? errbuf : curl_easy_strerror(res)) << std::endl;
+    if (res != CURLE_OK) {
+        const std::string errMsg = "Send via " + url + " as '" + config.username + "' failed: " +
+                                   (errbuf[0] ? errbuf : curl_easy_strerror(res));
+        if (error_out) *error_out = errMsg;
+        std::cerr << "[Mailer Error] " << errMsg << std::endl;
     }
 
     curl_slist_free_all(recipients);
@@ -154,28 +158,49 @@ void cleanup() { curl_global_cleanup(); }
 bool SmtpConfig::load(SmtpConfig& out, std::string* error) {
     auto fail = [&](const std::string& msg) {
         if (error) *error = msg;
+        std::cerr << "[Mailer Config Error] " << msg << std::endl;
         return false;
     };
 
-
     SmtpConfig cfg;
-    cfg.username = utils::load_credential("smtp_usr");
-    cfg.password = utils::load_credential("smtp_cred");
-    const std::string host;// = utils::load_credential("smtp_host");
-    if (!host.empty()) cfg.host = host;
-    const std::string port;// = utils::load_credential("smtp_port");
-    if (!port.empty()) {
-        try {
-            cfg.port = std::stoi(port);
-        } catch (...) {
-            return fail("Invalid smtp_port: '" + port + "'.");
-        }
+    try {
+        cfg.username = utils::load_credential("smtp_usr");
+        cfg.password = utils::load_credential("smtp_cred");
+    } catch (const std::exception& e) {
+        return fail(std::string("Failed to load SMTP credentials: ") + e.what());
     }
+
+    // Optional host override
+    try {
+        const std::string host = utils::load_credential("smtp_host");
+        if (!host.empty()) cfg.host = host;
+    } catch (...) {
+        // Optional credential; keep default host
+    }
+
+    // Optional port override
+    try {
+        const std::string port = utils::load_credential("smtp_port");
+        if (!port.empty()) {
+            try {
+                const int parsedPort = std::stoi(port);
+                if (parsedPort <= 0 || parsedPort > 65535) {
+                    return fail("Invalid smtp_port out of range: '" + port + "'.");
+                }
+                cfg.port = parsedPort;
+            } catch (...) {
+                return fail("Invalid smtp_port: '" + port + "'.");
+            }
+        }
+    } catch (...) {
+        // Optional credential; keep default port
+    }
+
     cfg.implicit_tls = (cfg.port == 465);
 
-    if (cfg.username.empty() || cfg.password.empty())
-        return fail("Missing credentials: need smtp_user + smtp_pass "
-                    "(systemd credentials).");
+    if (cfg.username.empty() || cfg.password.empty()) {
+        return fail("Missing credentials: need smtp_usr + smtp_cred (systemd credentials).");
+    }
     out = cfg;
     return true;
 }
@@ -190,7 +215,10 @@ bool sendPasswordReset(const SmtpConfig& config,
         return false;
     }
     std::string body = kResetTemplate;
-    body.replace(body.find(kCodePlaceholder), sizeof(kCodePlaceholder) - 1, code);
+    const auto pos = body.find(kCodePlaceholder);
+    if (pos != std::string::npos) {
+        body.replace(pos, sizeof(kCodePlaceholder) - 1, code);
+    }
     return sendPayload(config, to, kResetSubject, body, error_out);
 }
 
@@ -198,6 +226,22 @@ bool sendWorkReminder(const SmtpConfig& config,
                       const std::string& to,
                       std::string* error_out) {
     return sendPayload(config, to, kReminderSubject, kReminderBody, error_out);
+}
+
+bool sendBetreuungReminder(const SmtpConfig& config,
+                       const std::string& to,
+                       const std::string& code,
+                       std::string* error_out) {
+    if (code.empty() || code.find('\r') != std::string::npos) {
+        if (error_out) *error_out = "Invalid reset code.";
+        return false;
+    }
+    std::string body = kReminderTemplate;
+    const auto pos = body.find(kCodePlaceholder);
+    if (pos != std::string::npos) {
+        body.replace(pos, sizeof(kCodePlaceholder) - 1, code);
+    }
+    return sendPayload(config, to, kReminderSubject, body, error_out);
 }
 
 }  // namespace mailer

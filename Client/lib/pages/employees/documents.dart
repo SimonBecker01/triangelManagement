@@ -1,25 +1,26 @@
+import 'package:management_triangel/widgets/admin_ui.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:management_triangel/global.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:management_triangel/src/generated/triangel.pb.dart';
 import 'package:fixnum/fixnum.dart' as fn;
+
 import 'dart:typed_data';
 
 class DocumentsScreen extends StatefulWidget {
   const DocumentsScreen({super.key});
 
-    @override
+  @override
   State<DocumentsScreen> createState() => _DocumentsState();
 }
 
-class _DocumentsState extends State<DocumentsScreen>{
-
+class _DocumentsState extends State<DocumentsScreen> {
   @override
   void initState() {
     super.initState();
 
-    if(selectedCategories.isEmpty){
+    if (selectedCategories.isEmpty) {
       selectedCategories.addAll(documentCategoryListId);
     }
     if (documentGroupListId.isNotEmpty) {
@@ -28,16 +29,16 @@ class _DocumentsState extends State<DocumentsScreen>{
 
     dropDownChildren = _buildChildDropdown();
     dropDownDocumentGroup = _buildGroupDropdown();
-    
-    getDocumentsFromServer();
 
+    getDocumentsFromServer();
   }
-  
-  List<(int, String, int, List<int>, String)> selectedDocumentList = <(int, String, int, List<int>, String)>[];
+
+  List<(int, String, int, List<int>, String)> selectedDocumentList =
+      <(int, String, int, List<int>, String)>[];
   int selectedDocument = 0;
 
-  DropdownMenu<String> dropDownChildren = DropdownMenu<String>(dropdownMenuEntries: const [],);
-  DropdownMenu<String> dropDownDocumentGroup = DropdownMenu<String>(dropdownMenuEntries: const [],);
+  DropdownMenu<String> dropDownChildren = DropdownMenu<String>(dropdownMenuEntries: const []);
+  DropdownMenu<String> dropDownDocumentGroup = DropdownMenu<String>(dropdownMenuEntries: const []);
 
   final _authorController = TextEditingController();
 
@@ -51,11 +52,14 @@ class _DocumentsState extends State<DocumentsScreen>{
     return DropdownMenu<String>(
       expandedInsets: EdgeInsets.zero,
       dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-          childList.map<DropdownMenuEntry<String>>(
-              (String name) => DropdownMenuEntry<String>(
-                  value: name, label: name))),
+        childList.map<DropdownMenuEntry<String>>(
+          (String name) => DropdownMenuEntry<String>(value: name, label: name),
+        ),
+      ),
       enabled: childList.length > 1,
-      initialSelection: childList.isNotEmpty ? childList.first : null,
+      initialSelection: childListId.contains(selectedChild)
+          ? childList[childListId.indexOf(selectedChild)]
+          : (childList.isNotEmpty ? childList.first : null),
       onSelected: (value) {
         if (value != null) {
           selectedChild = childListId.elementAt(childList.indexOf(value));
@@ -69,46 +73,61 @@ class _DocumentsState extends State<DocumentsScreen>{
     return DropdownMenu<String>(
       expandedInsets: EdgeInsets.zero,
       dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-          documentGroupList.map<DropdownMenuEntry<String>>(
-              (String name) => DropdownMenuEntry<String>(
-                  value: name, label: name))),
+        documentGroupList.map<DropdownMenuEntry<String>>(
+          (String name) => DropdownMenuEntry<String>(value: name, label: name),
+        ),
+      ),
       enabled: documentGroupList.length > 1,
-      initialSelection:
-          documentGroupList.isNotEmpty ? documentGroupList.first : null,
+      initialSelection: documentGroupList.isNotEmpty ? documentGroupList.first : null,
       onSelected: (value) {
         if (value != null) {
-          selectedDocumentGroup =
-              documentGroupListId.elementAt(documentGroupList.indexOf(value));
+          selectedDocumentGroup = documentGroupListId.elementAt(documentGroupList.indexOf(value));
           updateDocumentList();
         }
       },
     );
   }
 
-  void getDocumentsFromServer() async {
-    DocumentsReply docs =
-        await globalGrpcClient.getDocuments(fn.Int64(selectedChild));
-    documentList.clear();
-    for(int i = 0; i < docs.dokumente.length; i++){
-      List<int> katList = [];
-      for(int j = 0; j < docs.dokumente.elementAt(i).kategorie.length; j++){
-        katList.add(docs.dokumente.elementAt(i).kategorie.elementAt(j).id.toInt());
-      }
-      documentList.add((docs.dokumente[i].klient.toInt(), docs.dokumente[i].name, docs.dokumente[i].gruppe.id.toInt(), katList, docs.dokumente[i].author));
+  Future<void> getDocumentsFromServer() async {
+    // Ignore late results after navigation or a change of client selection.
+    final clientId = selectedChild;
+    try {
+      final docs = await globalGrpcClient.getDocuments(fn.Int64(clientId));
+      if (!mounted || clientId != selectedChild) return;
+      final loaded = docs.dokumente
+          .map(
+            (d) => (
+              d.klient.toInt(),
+              d.name,
+              d.gruppe.id.toInt(),
+              d.kategorie.map((c) => c.id.toInt()).toList(),
+              d.author,
+            ),
+          )
+          .toList();
+      documentList
+        ..clear()
+        ..addAll(loaded);
+      updateDocumentList();
+    } catch (error) {
+      if (mounted) showRequestError(context, error);
     }
-    updateDocumentList();
   }
 
   void updateDocumentList() {
     setState(() {
       selectedDocument = 0;
       selectedDocumentList = [];
-      for(int i = 0; i < documentList.length; i++){
-        if(documentList[i].$1 == selectedChild && documentList[i].$3 == selectedDocumentGroup && selectedCategories.toSet().intersection(documentList[i].$4.toSet()).isNotEmpty){
+      for (int i = 0; i < documentList.length; i++) {
+        if (documentList[i].$1 == selectedChild &&
+            documentList[i].$3 == selectedDocumentGroup &&
+            selectedCategories.toSet().intersection(documentList[i].$4.toSet()).isNotEmpty) {
           selectedDocumentList.add(documentList[i]);
         }
       }
-       _authorController.text = (selectedDocumentList.isNotEmpty) ? '${"Autor: "} ${selectedDocumentList.elementAt(selectedDocument).$5}' : '';
+      _authorController.text = (selectedDocumentList.isNotEmpty)
+          ? '${"Autor: "} ${selectedDocumentList.elementAt(selectedDocument).$5}'
+          : '';
     });
   }
 
@@ -124,8 +143,9 @@ class _DocumentsState extends State<DocumentsScreen>{
           onTap: () {
             setState(() {
               if (selectedCategories.contains(documentCategoryListId[index])) {
-                selectedCategories
-                    .removeAt(selectedCategories.indexOf(documentCategoryListId[index]));
+                selectedCategories.removeAt(
+                  selectedCategories.indexOf(documentCategoryListId[index]),
+                );
               } else {
                 selectedCategories.add(documentCategoryListId[index]);
               }
@@ -157,44 +177,44 @@ class _DocumentsState extends State<DocumentsScreen>{
   }
 
   Future<void> _downloadSelectedDocument() async {
-    if (selectedDocumentList.isEmpty) {
-      return;
-    }
-
+    if (selectedDocument < 0 || selectedDocument >= selectedDocumentList.length) return;
     final (int klient, String name, int gruppe, List<int> kategorien, _) =
-        selectedDocumentList.elementAt(selectedDocument);
-
-    Dokument getDoc = Dokument(
-      name: name,
-      gruppe: IdObjekt(id: fn.Int64(gruppe)),
-      klient: fn.Int64(klient),
-    );
-
-    for (int i = 0; i < kategorien.length; i++) {
-      getDoc.kategorie.add(IdObjekt(id: fn.Int64(kategorien.elementAt(i))));
+        selectedDocumentList[selectedDocument];
+    try {
+      final document = Dokument(
+        name: name,
+        gruppe: IdObjekt(id: fn.Int64(gruppe)),
+        klient: fn.Int64(klient),
+      );
+      document.kategorie.addAll(kategorien.map((id) => IdObjekt(id: fn.Int64(id))));
+      final reply = await globalGrpcClient.getDocument(document);
+      if (!mounted) return;
+      await FilePicker.platform.saveFile(
+        dialogTitle: 'Bitte Speicherort auswählen:',
+        fileName: name,
+        bytes: Uint8List.fromList(reply.file),
+      );
+    } catch (error) {
+      if (mounted) showRequestError(context, error);
     }
-
-    final DocumentReply doc = await globalGrpcClient.getDocument(getDoc);
-
-    final Uint8List preppedFile = Uint8List.fromList(doc.file);
-
-    await FilePicker.platform.saveFile(
-      dialogTitle: 'Bitte Speicherort auswählen:',
-      fileName: name,
-      bytes: preppedFile,
-    );
   }
 
   Future<void> _deleteSelectedDocument() async {
-    if (selectedDocumentList.isEmpty) {
-      return;
+    if (selectedDocument < 0 || selectedDocument >= selectedDocumentList.length) return;
+    final item = selectedDocumentList[selectedDocument];
+    if (!await confirmRemoval(context, 'Dokument „${item.$2}“') || !mounted) return;
+    try {
+      await globalGrpcClient.deleteDocument(
+        Dokument(
+          name: item.$2,
+          gruppe: IdObjekt(id: fn.Int64(item.$3)),
+          klient: fn.Int64(item.$1),
+        ),
+      );
+      if (mounted) await getDocumentsFromServer();
+    } catch (error) {
+      if (mounted) showRequestError(context, error);
     }
-    await globalGrpcClient.deleteDocument(Dokument(
-        name: selectedDocumentList.elementAt(selectedDocument).$2,
-        gruppe: IdObjekt(
-            id: fn.Int64(selectedDocumentList.elementAt(selectedDocument).$3)),
-        klient: fn.Int64(selectedDocumentList.elementAt(selectedDocument).$1)));
-    getDocumentsFromServer();
   }
 
   @override
@@ -223,10 +243,7 @@ class _DocumentsState extends State<DocumentsScreen>{
             child: Row(
               children: [
                 const Spacer(flex: 9),
-                Expanded(
-                  flex: 2,
-                  child: dropDownChildren,
-                ),
+                Expanded(flex: 2, child: dropDownChildren),
               ],
             ),
           ),
@@ -240,10 +257,7 @@ class _DocumentsState extends State<DocumentsScreen>{
                     children: [
                       const Expanded(
                         flex: 1,
-                        child: Text(
-                          'Kategorien',
-                          textAlign: TextAlign.center,
-                        ),
+                        child: Text('Kategorien', textAlign: TextAlign.center),
                       ),
                       Expanded(
                         flex: 11,
@@ -259,10 +273,7 @@ class _DocumentsState extends State<DocumentsScreen>{
                   flex: 3,
                   child: Column(
                     children: [
-                      Expanded(
-                        flex: 3,
-                        child: dropDownDocumentGroup,
-                      ),
+                      Expanded(flex: 3, child: dropDownDocumentGroup),
                       Expanded(
                         flex: 8,
                         child: Padding(
@@ -281,19 +292,12 @@ class _DocumentsState extends State<DocumentsScreen>{
             flex: 2,
             child: Row(
               children: [
-                Expanded(
-                  flex: 3,
-                  child: TextField(
-                    controller: _authorController,
-                  ),
-                ),
+                Expanded(flex: 3, child: TextField(controller: _authorController)),
                 const Spacer(flex: 18),
                 Expanded(
                   flex: 3,
                   child: FilledButton(
-                    onPressed: selectedDocumentList.isNotEmpty
-                        ? _downloadSelectedDocument
-                        : null,
+                    onPressed: selectedDocumentList.isNotEmpty ? _downloadSelectedDocument : null,
                     child: const Text('Herunterladen'),
                   ),
                 ),
@@ -302,9 +306,10 @@ class _DocumentsState extends State<DocumentsScreen>{
                   flex: 3,
                   child: FilledButton(
                     onPressed:
-                        (selectedDocumentList.isNotEmpty && selectedDocumentList.elementAt(selectedDocument).$5 == loginName)
-                            ? _deleteSelectedDocument
-                            : null,
+                        (selectedDocumentList.isNotEmpty &&
+                            selectedDocumentList.elementAt(selectedDocument).$5 == loginName)
+                        ? _deleteSelectedDocument
+                        : null,
                     child: const Text('Löschen'),
                   ),
                 ),
@@ -313,7 +318,9 @@ class _DocumentsState extends State<DocumentsScreen>{
                   flex: 3,
                   child: FilledButton(
                     onPressed: () {
-                      Navigator.of(context).pushNamed('/newdocument');
+                      Navigator.of(context).pushNamed('/newdocument').then((_) {
+                        if (mounted) getDocumentsFromServer();
+                      });
                     },
                     child: const Text('Neu'),
                   ),
@@ -343,22 +350,13 @@ class _DocumentsState extends State<DocumentsScreen>{
             const SizedBox(height: 12),
             const Text('Kategorien', textAlign: TextAlign.center),
             const SizedBox(height: 8),
-            SizedBox(
-              height: 200,
-              child: _categoryListView(),
-            ),
+            SizedBox(height: 200, child: _categoryListView()),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 220,
-              child: _documentListView(),
-            ),
+            SizedBox(height: 220, child: _documentListView()),
             const SizedBox(height: 16),
             TextField(
               controller: _authorController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Autor',
-              ),
+              decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'Autor'),
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -367,21 +365,22 @@ class _DocumentsState extends State<DocumentsScreen>{
               alignment: WrapAlignment.center,
               children: [
                 FilledButton(
-                  onPressed: selectedDocumentList.isNotEmpty
-                      ? _downloadSelectedDocument
-                      : null,
+                  onPressed: selectedDocumentList.isNotEmpty ? _downloadSelectedDocument : null,
                   child: const Text('Herunterladen'),
                 ),
                 FilledButton(
                   onPressed:
-                      (selectedDocumentList.isNotEmpty && selectedDocumentList.elementAt(selectedDocument).$5 == loginName)
-                          ? _deleteSelectedDocument
-                          : null,
+                      (selectedDocumentList.isNotEmpty &&
+                          selectedDocumentList.elementAt(selectedDocument).$5 == loginName)
+                      ? _deleteSelectedDocument
+                      : null,
                   child: const Text('Löschen'),
                 ),
                 FilledButton(
                   onPressed: () {
-                    Navigator.of(context).pushNamed('/newdocument');
+                    Navigator.of(context).pushNamed('/newdocument').then((_) {
+                      if (mounted) getDocumentsFromServer();
+                    });
                   },
                   child: const Text('Neu'),
                 ),

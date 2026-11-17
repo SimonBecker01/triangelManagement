@@ -160,6 +160,14 @@ service GetKlientenService {
   rpc GetKlienten(GetKlientenRequest) returns (GetKlientenReply);
 }
 
+service GetSettingsService {
+  rpc GetSettings(GetSettingsRequest) returns (GetSettingsReply);
+}
+
+service SetSettingsService {
+  rpc SetSettings(SetSettingsRequest) returns (SetSettingsReply);
+}
+
 
 //types
 message Klient {
@@ -248,6 +256,11 @@ message Auswertung {
   string beschreibung = 6;
   string betreuer = 7;
   bool abrechenbar = 8;
+}
+
+message Setting {
+  string name = 1;
+  string wert = 2;
 }
 
 
@@ -568,4 +581,20 @@ message GetKlientenRequest {
 
 message GetKlientenReply {
   repeated Klient klientenList = 1;
+}
+
+message GetSettingsRequest {
+  repeated string names = 1;
+}
+
+message GetSettingsReply {
+  repeated Setting settingsList = 1;
+}
+
+message SetSettingsRequest {
+  repeated Setting settingsList = 1;
+}
+
+message SetSettingsReply {
+  repeated string error_code = 1;
 }

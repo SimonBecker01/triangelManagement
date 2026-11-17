@@ -1,5 +1,5 @@
 
-add_executable(triangelbackend main.cpp utils.cpp jwt_auth.cpp database_ops.cpp serviceimplement.cpp mailer.cpp)
+add_executable(triangelbackend main.cpp utils.cpp utils_grpc.cpp jwt_auth.cpp database_ops.cpp serviceimplement.cpp mailer.cpp)
 set_target_properties(triangelbackend PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "/opt/triangelservice/"
     INSTALL_RPATH "$ORIGIN/lib"
@@ -15,4 +15,19 @@ target_link_libraries(triangelbackend PRIVATE
     ${MYSQL_LIB}
     OpenSSL::SSL
     OpenSSL::Crypto
+)
+
+add_executable(triangelreminder reminder.cpp mailer.cpp utils.cpp)
+
+set_target_properties(triangelreminder PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "/opt/triangelservice/"
+    INSTALL_RPATH "$ORIGIN/lib"
+    BUILD_WITH_INSTALL_RPATH TRUE
+)
+
+target_include_directories(triangelreminder PRIVATE ${CMAKE_SOURCE_DIR}/include ${MYSQL_INCLUDE})
+
+target_link_libraries(triangelreminder PRIVATE
+    CURL::libcurl
+    ${MYSQL_LIB}
 )

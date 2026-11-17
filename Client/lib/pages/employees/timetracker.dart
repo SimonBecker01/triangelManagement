@@ -1,6 +1,6 @@
+import 'package:management_triangel/widgets/admin_ui.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:grpc/grpc.dart';
 import 'package:interval_time_picker/models/visible_step.dart';
 import 'package:management_triangel/global.dart';
 import 'package:interval_time_picker/interval_time_picker.dart';
@@ -35,25 +35,26 @@ class TimetrackerScreen extends StatefulWidget {
 }
 
 class _TimeTrackerState extends State<TimetrackerScreen> {
-  DropdownMenu<String> dropDownChildren =
-      DropdownMenu<String>(dropdownMenuEntries: const []);
-  DropdownMenu<String> dropDownActivity =
-      DropdownMenu<String>(dropdownMenuEntries: const []);
+  DropdownMenu<String> dropDownChildren = DropdownMenu<String>(dropdownMenuEntries: const []);
+  DropdownMenu<String> dropDownActivity = DropdownMenu<String>(dropdownMenuEntries: const []);
 
   final _startTimeController = TextEditingController();
   final _endTimeController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   TimeOfDay startTime = TimeOfDay(
-      hour: TimeOfDay.now().hour,
-      minute: TimeOfDay.now().minute - (TimeOfDay.now().minute % 5));
+    hour: TimeOfDay.now().hour,
+    minute: TimeOfDay.now().minute - (TimeOfDay.now().minute % 5),
+  );
   TimeOfDay endTime = TimeOfDay(
-      hour: TimeOfDay.now().plusMinutes(30).hour,
-      minute:
-          TimeOfDay.now().plusMinutes(30).minute - (TimeOfDay.now().minute % 5));
+    hour: TimeOfDay.now().plusMinutes(30).hour,
+    minute: TimeOfDay.now().plusMinutes(30).minute - (TimeOfDay.now().minute % 5),
+  );
 
   DateTime currSelDate = DateTime.now();
   int currSelActivity = -1;
+  bool _saving = false;
+  int _loadSequence = 0;
 
   @override
   void initState() {
@@ -61,6 +62,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
 
     dropDownChildren = _buildChildDropdown();
     dropDownActivity = _buildActivityDropdown();
+    _changedDate();
   }
 
   @override
@@ -71,17 +73,17 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
     super.dispose();
   }
 
-  DropdownMenu<String> _buildChildDropdown(
-      {String? initialName, bool entriesEnabled = true}) {
+  DropdownMenu<String> _buildChildDropdown({String? initialName, bool entriesEnabled = true}) {
     return DropdownMenu<String>(
       expandedInsets: EdgeInsets.zero,
       dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-          childList.map<DropdownMenuEntry<String>>((String name) =>
-              DropdownMenuEntry<String>(
-                  value: name, label: name, enabled: entriesEnabled))),
+        childList.map<DropdownMenuEntry<String>>(
+          (String name) =>
+              DropdownMenuEntry<String>(value: name, label: name, enabled: entriesEnabled),
+        ),
+      ),
       enabled: childList.length > 1,
-      initialSelection:
-          initialName ?? (childList.isNotEmpty ? childList.first : null),
+      initialSelection: initialName ?? (childList.isNotEmpty ? childList.first : null),
       onSelected: (value) {
         if (value != null) {
           selectedChild = childListId.elementAt(childList.indexOf(value));
@@ -94,68 +96,68 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
     return DropdownMenu<String>(
       expandedInsets: EdgeInsets.zero,
       dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<String>>(
-          activityList.map<DropdownMenuEntry<String>>(
-              (String name) => DropdownMenuEntry<String>(
-                  value: name, label: name))),
+        activityList.map<DropdownMenuEntry<String>>(
+          (String name) => DropdownMenuEntry<String>(value: name, label: name),
+        ),
+      ),
       enabled: activityList.length > 1,
-      initialSelection:
-          initialName ?? (activityList.isNotEmpty ? activityList.first : null),
+      initialSelection: initialName ?? (activityList.isNotEmpty ? activityList.first : null),
       onSelected: (value) {
         if (value != null) {
-          selectedActivity =
-              activityListId.elementAt(activityList.indexOf(value));
+          selectedActivity = activityListId.elementAt(activityList.indexOf(value));
         }
       },
     );
   }
 
   Future<void> _changedDate() async {
-    final zeiteintraegeResult = await globalGrpcClient.getZeiteintraege(Datum(
-        year: currSelDate.year, month: currSelDate.month, day: currSelDate.day));
-
-    activityOnDayList.clear();
-
-    for (int i = 0; i < zeiteintraegeResult.zeiteintraege.length; i++) {
-      TimeOfDay vonToD = TimeOfDay(
-          hour: zeiteintraegeResult.zeiteintraege.elementAt(i).anfang.hour,
-          minute: zeiteintraegeResult.zeiteintraege.elementAt(i).anfang.minute);
-      TimeOfDay bisToD = TimeOfDay(
-          hour: zeiteintraegeResult.zeiteintraege.elementAt(i).ende.hour,
-          minute: zeiteintraegeResult.zeiteintraege.elementAt(i).ende.minute);
-      activityOnDayList.add((
-        vonToD,
-        bisToD,
-        zeiteintraegeResult.zeiteintraege.elementAt(i).taetigkeitid.toInt(),
-        zeiteintraegeResult.zeiteintraege.elementAt(i).klientid.toInt(),
-        zeiteintraegeResult.zeiteintraege.elementAt(i).beschreibung,
-        zeiteintraegeResult.zeiteintraege.elementAt(i).eintragid.toInt()
-      ));
-    }
-    if (mounted) {
-      setState(() {});
+    final requested = currSelDate;
+    final sequence = ++_loadSequence;
+    try {
+      final result = await globalGrpcClient.getZeiteintraege(
+        Datum(year: requested.year, month: requested.month, day: requested.day),
+      );
+      if (!mounted || sequence != _loadSequence) return;
+      final entries = result.zeiteintraege
+          .map(
+            (e) => (
+              TimeOfDay(hour: e.anfang.hour, minute: e.anfang.minute),
+              TimeOfDay(hour: e.ende.hour, minute: e.ende.minute),
+              e.taetigkeitid.toInt(),
+              e.klientid.toInt(),
+              e.beschreibung,
+              e.eintragid.toInt(),
+            ),
+          )
+          .toList();
+      setState(() {
+        activityOnDayList
+          ..clear()
+          ..addAll(entries);
+        if (!entries.any((e) => e.$6 == currSelActivity)) currSelActivity = -1;
+      });
+    } catch (error) {
+      if (mounted && sequence == _loadSequence) showRequestError(context, error);
     }
   }
 
-  void _changedactivity(int changedIndex){
-
-    startTime = activityOnDayList[changedIndex].$1;
-    endTime = activityOnDayList[changedIndex].$2;
-    selectedActivity = activityOnDayList[changedIndex].$3;
-    selectedChild = activityOnDayList[changedIndex].$4;
-    _descriptionController.text = activityOnDayList[changedIndex].$5;
-    currSelActivity = activityOnDayList[changedIndex].$6;
-
-
+  void _changedactivity(int changedIndex) {
+    if (changedIndex < 0 || changedIndex >= activityOnDayList.length) return;
+    final entry = activityOnDayList[changedIndex];
+    startTime = entry.$1;
+    endTime = entry.$2;
+    selectedActivity = entry.$3;
+    selectedChild = entry.$4;
+    _descriptionController.text = entry.$5;
+    currSelActivity = entry.$6;
+    final activityIndex = activityListId.indexOf(entry.$3);
+    final childIndex = childListId.indexOf(entry.$4);
     setState(() {
       dropDownActivity = _buildActivityDropdown(
-        initialName: activityList.elementAt(
-            activityListId.indexOf(activityOnDayList[changedIndex].$3)),
+        initialName: activityIndex < 0 ? null : activityList[activityIndex],
       );
-
       dropDownChildren = _buildChildDropdown(
-        initialName: childList.elementAt(
-            childListId.indexOf(activityOnDayList[changedIndex].$4)),
-        entriesEnabled: false,
+        initialName: childIndex < 0 ? null : childList[childIndex],
       );
     });
   }
@@ -167,7 +169,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
       interval: 5,
       visibleStep: VisibleStep.fifths,
     ));
-    if (selectedTime != null && selectedTime.toString().length > 1) {
+    if (mounted && selectedTime != null) {
       setState(() {
         startTime = selectedTime;
       });
@@ -181,7 +183,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
       interval: 5,
       visibleStep: VisibleStep.fifths,
     ));
-    if (selectedTime != null && selectedTime.toString().length > 1) {
+    if (mounted && selectedTime != null) {
       setState(() {
         if (selectedTime.compareTo(startTime) > 0) {
           endTime = selectedTime;
@@ -218,16 +220,20 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
     );
   }
 
+  String _activityName(int id) {
+    final index = activityListId.indexOf(id);
+    return index < 0 ? 'Unbekannte Tätigkeit' : activityList[index];
+  }
+
   Widget _entryListView() {
     return ListView.builder(
       itemCount: activityOnDayList.length,
       itemBuilder: (context, index) {
         return ListTile(
           title: Text(
-              "${activityOnDayList[index].$1.format(context)}-${activityOnDayList[index].$2.format(context)} - ${activityList.elementAt(activityListId.indexOf(activityOnDayList[index].$3))}"),
-          tileColor: activityOnDayList[index].$6 == currSelActivity
-              ? Colors.blue
-              : Colors.white,
+            "${activityOnDayList[index].$1.format(context)}-${activityOnDayList[index].$2.format(context)} - ${_activityName(activityOnDayList[index].$3)}",
+          ),
+          tileColor: activityOnDayList[index].$6 == currSelActivity ? Colors.blue : Colors.white,
           onTap: () {
             _changedactivity(index);
           },
@@ -237,139 +243,56 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
   }
 
   Future<void> _saveChange() async {
-    try {
-      await globalGrpcClient.saveZeiteintrag(
-          Zeiteintrag(
-              dayofentry: Datum(
-                  year: currSelDate.year,
-                  month: currSelDate.month,
-                  day: currSelDate.day),
-              anfang: Uhrzeit(hour: startTime.hour, minute: startTime.minute),
-              ende: Uhrzeit(hour: endTime.hour, minute: endTime.minute),
-              taetigkeitid: fn.Int64(selectedActivity),
-              klientid: fn.Int64(selectedChild),
-              beschreibung: _descriptionController.text,
-              eintragid: fn.Int64(currSelActivity)),
-          2);
-    } catch (error) {
-      if (error is GrpcError && error.code == 6 && mounted) {
-        showDialog(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Überschneidung'),
-            content: const Text('Überschneidung mit bestehendem Eintrag!'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      } else {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: const Text('Serverfehler'),
-              content: const Text('Fehler auf Serverseite.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-      }
-    }
-    _changedDate();
+    await _performOperation(2);
   }
 
   Future<void> _delete() async {
-    try {
-      await globalGrpcClient.saveZeiteintrag(
-          Zeiteintrag(
-              dayofentry: Datum(
-                  year: currSelDate.year,
-                  month: currSelDate.month,
-                  day: currSelDate.day),
-              anfang: Uhrzeit(hour: startTime.hour, minute: startTime.minute),
-              ende: Uhrzeit(hour: endTime.hour, minute: endTime.minute),
-              taetigkeitid: fn.Int64(selectedActivity),
-              klientid: fn.Int64(selectedChild),
-              eintragid: fn.Int64(currSelActivity)),
-          3);
-    } catch (error) {
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Serverfehler'),
-            content: const Text('Fehler auf Serverseite.'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-    }
-    _changedDate();
+    await _performOperation(3);
   }
 
   Future<void> _createNew() async {
-    ZeiteintragReply rep = ZeiteintragReply(errorCode: "");
-    try {
-      rep = await globalGrpcClient.saveZeiteintrag(
-          Zeiteintrag(
-              dayofentry: Datum(
-                  year: currSelDate.year,
-                  month: currSelDate.month,
-                  day: currSelDate.day),
-              anfang: Uhrzeit(hour: startTime.hour, minute: startTime.minute),
-              ende: Uhrzeit(hour: endTime.hour, minute: endTime.minute),
-              taetigkeitid: fn.Int64(selectedActivity),
-              klientid: fn.Int64(selectedChild),
-              beschreibung: _descriptionController.text),
-          1);
-    } catch (error) {
-      if (error is GrpcError && error.code == 6 && mounted) {
-        showDialog(
-          context: context,
-          builder: (dialogContext) => AlertDialog(
-            title: const Text('Eintrag nicht möglich'),
-            content: Text(rep.errorCode),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      } else {
-        if (mounted) {
-          showDialog(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: const Text('Serverfehler'),
-              content: const Text('Fehler auf Serverseite.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-      }
+    await _performOperation(1);
+  }
+
+  // Domain validation errors are returned in errorCode on an OK gRPC reply;
+  // transport errors are caught separately. Never display a failed save as success.
+  Future<void> _performOperation(int operation) async {
+    if (_saving) return;
+    if ((operation != 1 && currSelActivity <= 0) ||
+        selectedChild <= 0 ||
+        (operation != 3 && (selectedActivity <= 0 || endTime.compareTo(startTime) <= 0))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bitte Klient, Tätigkeit und einen gültigen Zeitraum auswählen.'),
+        ),
+      );
+      return;
     }
-    _changedDate();
+    setState(() => _saving = true);
+    try {
+      final reply = await globalGrpcClient.saveZeiteintrag(
+        Zeiteintrag(
+          dayofentry: Datum(year: currSelDate.year, month: currSelDate.month, day: currSelDate.day),
+          anfang: Uhrzeit(hour: startTime.hour, minute: startTime.minute),
+          ende: Uhrzeit(hour: endTime.hour, minute: endTime.minute),
+          taetigkeitid: fn.Int64(selectedActivity),
+          klientid: fn.Int64(selectedChild),
+          beschreibung: _descriptionController.text,
+          eintragid: fn.Int64(operation == 1 ? 0 : currSelActivity),
+        ),
+        operation,
+      );
+      if (!mounted) return;
+      if (reply.errorCode.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reply.errorCode)));
+        return;
+      }
+      await _changedDate();
+    } catch (error) {
+      if (mounted) showRequestError(context, error);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -401,10 +324,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
             child: Row(
               children: [
                 const Spacer(flex: 9),
-                Expanded(
-                  flex: 2,
-                  child: dropDownChildren,
-                ),
+                Expanded(flex: 2, child: dropDownChildren),
               ],
             ),
           ),
@@ -418,10 +338,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
                   child: Column(
                     children: [
                       const Spacer(flex: 2),
-                      Expanded(
-                        flex: 3,
-                        child: dropDownActivity,
-                      ),
+                      Expanded(flex: 3, child: dropDownActivity),
                       Expanded(
                         flex: 8,
                         child: TextField(
@@ -450,6 +367,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
                           lastDate: DateTime(3000),
                           onDateChanged: (DateTime value) {
                             currSelDate = value;
+                            currSelActivity = -1;
                             _changedDate();
                           },
                         ),
@@ -464,22 +382,10 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
                                 padding: const EdgeInsets.all(16),
                                 child: Column(
                                   children: [
-                                    Expanded(
-                                      flex: 1,
-                                      child: _startTimeButton(),
-                                    ),
-                                    const Expanded(
-                                      flex: 1,
-                                      child: Text('Tätigkeitsbeginn'),
-                                    ),
-                                    Expanded(
-                                      flex: 1,
-                                      child: _endTimeButton(),
-                                    ),
-                                    const Expanded(
-                                      flex: 1,
-                                      child: Text('Tätigkeitsende'),
-                                    ),
+                                    Expanded(flex: 1, child: _startTimeButton()),
+                                    const Expanded(flex: 1, child: Text('Tätigkeitsbeginn')),
+                                    Expanded(flex: 1, child: _endTimeButton()),
+                                    const Expanded(flex: 1, child: Text('Tätigkeitsende')),
                                     const Spacer(flex: 8),
                                   ],
                                 ),
@@ -509,21 +415,21 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
                 Expanded(
                   flex: 1,
                   child: FilledButton(
-                    onPressed: _saveChange,
+                    onPressed: !_saving && currSelActivity > 0 ? _saveChange : null,
                     child: const Text('Ändern'),
                   ),
                 ),
                 Expanded(
                   flex: 1,
                   child: FilledButton(
-                    onPressed: _delete,
+                    onPressed: !_saving && currSelActivity > 0 ? _delete : null,
                     child: const Text('Löschen'),
                   ),
                 ),
                 Expanded(
                   flex: 1,
                   child: FilledButton(
-                    onPressed: _createNew,
+                    onPressed: _saving ? null : _createNew,
                     child: const Text('Neu Anlegen'),
                   ),
                 ),
@@ -564,14 +470,14 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
               onResult: (result) {
                 setState(() {
                   _descriptionController.text = result.recognizedWords;
-                  _descriptionController.selection =
-                      TextSelection.collapsed(offset: _descriptionController.text.length);
+                  _descriptionController.selection = TextSelection.collapsed(
+                    offset: _descriptionController.text.length,
+                  );
                 });
               },
               onError: (error) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Speech error: ${error.errorMsg}')),
-                );
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(SnackBar(content: Text('Speech error: ${error.errorMsg}')));
               },
             ),
             const SizedBox(height: 12),
@@ -583,6 +489,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
                 lastDate: DateTime(3000),
                 onDateChanged: (DateTime value) {
                   currSelDate = value;
+                  currSelActivity = -1;
                   _changedDate();
                 },
               ),
@@ -597,8 +504,7 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
                     children: [
                       _startTimeButton(),
                       const SizedBox(height: 4),
-                      const Text('Tätigkeitsbeginn',
-                          textAlign: TextAlign.center),
+                      const Text('Tätigkeitsbeginn', textAlign: TextAlign.center),
                     ],
                   ),
                 ),
@@ -616,39 +522,27 @@ class _TimeTrackerState extends State<TimetrackerScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 220,
-              child: _entryListView(),
-            ),
+            SizedBox(height: 220, child: _entryListView()),
             const SizedBox(height: 16),
-            Row(
+            AdminActions(
               children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: currSelActivity >= 0 ? _saveChange : null,
-                    child: const Text('Ändern'),
-                  ),
+                FilledButton(
+                  onPressed: !_saving && currSelActivity > 0 ? _saveChange : null,
+                  child: const Text('Ändern'),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: currSelActivity >= 0 ? _delete : null,
-                    child: const Text('Löschen'),
-                  ),
+                OutlinedButton(
+                  onPressed: !_saving && currSelActivity > 0 ? _delete : null,
+                  child: const Text('Löschen'),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _createNew,
-                    child: const Text('Neu Anlegen'),
-                  ),
+                FilledButton(
+                  onPressed: _saving ? null : _createNew,
+                  child: const Text('Neu anlegen'),
                 ),
               ],
             ),
           ],
-        )
-      )
+        ),
+      ),
     );
   }
-
 }

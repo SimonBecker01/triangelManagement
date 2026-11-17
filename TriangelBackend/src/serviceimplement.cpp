@@ -1,4 +1,60 @@
 #include "serviceimplement.hpp"
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <system_error>
+
+namespace {
+constexpr std::size_t kMaxDocumentBytes = 20u * 1024u * 1024u;
+
+template<class Reply>
+grpc::Status mutationStatus(int rc, Reply* reply) {
+    if (rc == 0) return grpc::Status::OK;
+    if (rc == 2) {
+        reply->set_error_code("Eintrag nicht gefunden, bereits vorhanden oder noch in Verwendung.");
+        return grpc::Status::OK;
+    }
+    if (rc == 3) return {grpc::StatusCode::PERMISSION_DENIED, "Keine Berechtigung."};
+    return {grpc::StatusCode::INTERNAL, "Datenbankfehler."};
+}
+grpc::Status readStatus(int rc) {
+    if (rc == 0) return grpc::Status::OK;
+    if (rc == 2) return {grpc::StatusCode::NOT_FOUND, "Eintrag nicht gefunden."};
+    if (rc == 3) return {grpc::StatusCode::PERMISSION_DENIED, "Keine Berechtigung."};
+    return {grpc::StatusCode::INTERNAL, "Datenbankfehler."};
+}
+bool validDate(const triangel::Datum& d) {
+    using namespace std::chrono;
+    if (d.year() < 1000 || d.year() > 9999 || d.month() < 1 || d.month() > 12 || d.day() < 1 || d.day() > 31) return false;
+    return year_month_day{year{d.year()}, month{static_cast<unsigned>(d.month())}, day{static_cast<unsigned>(d.day())}}.ok();
+}
+bool validTime(const triangel::Uhrzeit& t) {
+    return t.hour() >= 0 && t.hour() < 24 && t.minute() >= 0 && t.minute() < 60;
+}
+std::string dateText(const triangel::Datum& d) {
+    std::ostringstream out;
+    out << std::setfill('0') << std::setw(4) << d.year() << '-' << std::setw(2) << d.month() << '-' << std::setw(2) << d.day();
+    return out.str();
+}
+std::string dateTimeText(const triangel::Datum& d, const triangel::Uhrzeit& t) {
+    std::ostringstream out;
+    out << dateText(d) << '-' << std::setfill('0') << std::setw(2) << t.hour() << '-' << std::setw(2) << t.minute();
+    return out.str();
+}
+int colorSetting(DatabaseOperator& db, const char* key, int fallback) {
+    std::string value;
+    if (db.getSettingsValue(key, value) != 0) return fallback;
+    try {
+        std::size_t used = 0;
+        const int result = std::stoi(value, &used);
+        return used == value.size() && result >= 0 && result <= 255 ? result : fallback;
+    } catch (...) { return fallback; }
+}
+}
+
 
 
 namespace services {
@@ -7,55 +63,49 @@ namespace services {
 
     AuthServiceImpl::AuthServiceImpl(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status AuthServiceImpl::Login(grpc::ServerContext* context, const triangel::LoginRequest* request, triangel::LoginReply* reply) {
-        std::int64_t user_id = 0;
-        std::int32_t forceReset = 0;
-        std::int32_t role = 0;
-        if (database_.checkUser(request->username(), request->password(), user_id, forceReset, role) != 0)
-            return {grpc::StatusCode::UNAUTHENTICATED, "Nutzername oder Passwort inkorrekt."};
-        reply->set_access_token(jwt_.issue(user_id, request->username()));
-        reply->set_forceresetpass(forceReset);
-        reply->set_role(role);
-        std::vector<db::raw::Klient> klientenVector;
-        database_.getKlienten(user_id, klientenVector);
-        for(int i = 0;i < klientenVector.size();i++){
-            triangel::Klient* nextKlient = reply->add_klienten();
-            nextKlient->set_id(klientenVector.at(i).id);
-            nextKlient->set_nname(klientenVector.at(i).lastName);
-            nextKlient->set_fname(klientenVector.at(i).firstName);
+    grpc::Status AuthServiceImpl::Login(grpc::ServerContext* context, const triangel::LoginRequest* request, triangel::LoginReply* reply) try {
+        if (request->username().empty() || request->password().empty())
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Nutzername und Passwort sind erforderlich."};
+        std::int64_t user_id = 0; std::int32_t forceReset = 0, role = 0;
+        const int rc = database_.checkUser(request->username(), request->password(), user_id, forceReset, role);
+        if (rc == -1) return {grpc::StatusCode::INTERNAL, "Anmeldung derzeit nicht möglich."};
+        if (rc != 0) return {grpc::StatusCode::UNAUTHENTICATED, "Nutzername oder Passwort inkorrekt."};
+        std::vector<db::raw::Klient> klienten;
+        if (const int clientsRc = database_.getKlienten(user_id, klienten); clientsRc != 0) return readStatus(clientsRc);
+        for (const auto& k : klienten) {
+            auto* item = reply->add_klienten(); item->set_id(k.id); item->set_nname(k.lastName); item->set_fname(k.firstName);
         }
-        std::string r, g, b;
-        if(database_.getSettingsValue("darkBGR", r) != 0 || r.empty()) r = "88";
-        if(database_.getSettingsValue("darkBGG", g) != 0 || g.empty()) g = "140";
-        if(database_.getSettingsValue("darkBGB", b) != 0 || b.empty()) b = "52";
-        triangel::Color* dbg = reply->mutable_darkbg();
-        dbg->set_r(std::stoi(r));
-        dbg->set_g(std::stoi(g));
-        dbg->set_b(std::stoi(b));
-        
-        if(database_.getSettingsValue("lightBGR", r) != 0 || r.empty()) r = "122";
-        if(database_.getSettingsValue("lightBGG", g) != 0 || g.empty()) g = "201";
-        if(database_.getSettingsValue("lightBGB", b) != 0 || b.empty()) b = "67";
-        triangel::Color* lbg = reply->mutable_lightbg();
-        lbg->set_r(std::stoi(r));
-        lbg->set_g(std::stoi(g));
-        lbg->set_b(std::stoi(b));
-
+        auto* dark = reply->mutable_darkbg();
+        dark->set_r(colorSetting(database_, "darkBGR", 88));
+        dark->set_g(colorSetting(database_, "darkBGG", 140));
+        dark->set_b(colorSetting(database_, "darkBGB", 52));
+        auto* light = reply->mutable_lightbg();
+        light->set_r(colorSetting(database_, "lightBGR", 122));
+        light->set_g(colorSetting(database_, "lightBGG", 201));
+        light->set_b(colorSetting(database_, "lightBGB", 67));
+        reply->set_access_token(jwt_.issue(user_id, request->username()));
+        reply->set_forceresetpass(forceReset); reply->set_role(role);
         return grpc::Status::OK;
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
 
     DocumentConfigService::DocumentConfigService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DocumentConfigService::GetDocumentConfig(grpc::ServerContext* context, const triangel::DocumentConfigRequest* request, triangel::DocumentConfigReply* reply) {
+    grpc::Status DocumentConfigService::GetDocumentConfig(grpc::ServerContext* context, const triangel::DocumentConfigRequest* request, triangel::DocumentConfigReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
         std::vector<db::raw::Gruppe> groups;
         std::vector<db::raw::Kategorie> categories;
-        database_.getGruppen(principal.user_id, groups);
-        database_.getKategorien(principal.user_id, categories);
+        if (auto status = readStatus(database_.getGruppen(principal.user_id, groups)); !status.ok()) return status;
+        if (auto status = readStatus(database_.getKategorien(principal.user_id, categories)); !status.ok()) return status;
 
         for(int i = 0;i < groups.size();i++){
             triangel::IdObjekt* gruppe = reply->add_gruppen();
@@ -70,18 +120,25 @@ namespace services {
         }
 
         return grpc::Status::OK;
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
 
     DocumentsService::DocumentsService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DocumentsService::GetDocuments(grpc::ServerContext* context, const triangel::DocumentsRequest* request, triangel::DocumentsReply* reply) {
+    grpc::Status DocumentsService::GetDocuments(grpc::ServerContext* context, const triangel::DocumentsRequest* request, triangel::DocumentsReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
         std::vector<db::resolved::Dokument> documents;
-        database_.getDokumenteAuthor(principal.user_id, request->klientid(), documents);
+        if (request->klientid() < 0) return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Klienten-ID."};
+        if (auto status = readStatus(database_.getDokumenteAuthor(principal.user_id, request->klientid(), documents)); !status.ok()) return status;
 
         for(int i = 0;i < documents.size();i++){
             triangel::Dokument* dokument = reply->add_dokumente();
@@ -101,11 +158,17 @@ namespace services {
         }
 
         return grpc::Status::OK;
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     DocumentService::DocumentService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DocumentService::GetDocument(grpc::ServerContext* context, const triangel::DocumentRequest* request, triangel::DocumentReply* reply) {
+    grpc::Status DocumentService::GetDocument(grpc::ServerContext* context, const triangel::DocumentRequest* request, triangel::DocumentReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -120,7 +183,9 @@ namespace services {
         }
         dokument.klient = request->dokument().klient();
 
-        database_.getDokumentFile(principal.user_id, dokument, filePath);
+        if (request->dokument().klient() < 0 || request->dokument().gruppe().id() <= 0)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültiges Dokument."};
+        if (auto status = readStatus(database_.getDokumentFile(principal.user_id, dokument, filePath)); !status.ok()) return status;
 
         std::ifstream documentFile(filePath, std::ios::binary);
 
@@ -131,8 +196,9 @@ namespace services {
         return {grpc::StatusCode::INTERNAL, "Failed to read document"};
         }
 
+        if (size > kMaxDocumentBytes) return {grpc::StatusCode::RESOURCE_EXHAUSTED, "Dokument ist zu groß."};
         std::string documentData;
-        documentData.resize(size);
+        documentData.resize(static_cast<std::size_t>(size));
 
         if (!documentFile.read(documentData.data(), static_cast<std::streamsize>(size))){
             return {grpc::StatusCode::INTERNAL, "Failed to read document"};
@@ -141,74 +207,97 @@ namespace services {
         reply->set_file(std::move(documentData));
 
         return grpc::Status::OK;
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     DeleteDocumentService::DeleteDocumentService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DeleteDocumentService::DeleteDocument(grpc::ServerContext* context, const triangel::DeleteDocumentRequest* request, triangel::DeleteDocumentReply* reply) {
+    grpc::Status DeleteDocumentService::DeleteDocument(grpc::ServerContext* context, const triangel::DeleteDocumentRequest* request, triangel::DeleteDocumentReply* reply) try {
         triangel::auth::Principal principal;
-        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
-            return status;
-        }
-
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()) return status;
+        if (request->dokument().klient() < 0 || request->dokument().gruppe().id() <= 0)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültiges Dokument."};
         db::raw::Dokument dokument;
-        std::string filePath;
-        dokument.name = request->dokument().name();
-        dokument.gruppe = request->dokument().gruppe().id();
-        dokument.klient = request->dokument().klient();
-
-        database_.deleteDokumentFile(principal.user_id, dokument, filePath);
-
-        std::remove(filePath.c_str());
-
+        dokument.name = request->dokument().name(); dokument.gruppe = request->dokument().gruppe().id(); dokument.klient = request->dokument().klient();
+        std::string path;
+        if (auto status = readStatus(database_.deleteDokumentFile(principal.user_id, dokument, path)); !status.ok()) return status;
+        std::error_code error;
+        std::filesystem::remove(path, error);
+        if (error) {
+            std::cerr << "Document metadata deleted, but file cleanup failed: " << error.message() << std::endl;
+            return {grpc::StatusCode::INTERNAL, "Dokumentdaten entfernt, Datei konnte nicht gelöscht werden. Bitte Administrator informieren."};
+        }
         return grpc::Status::OK;
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
     
     SendDocumentService::SendDocumentService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status SendDocumentService::SendDocument(grpc::ServerContext* context, const triangel::SendDocumentRequest* request, triangel::SendDocumentReply* reply) {
+    grpc::Status SendDocumentService::SendDocument(grpc::ServerContext* context, const triangel::SendDocumentRequest* request, triangel::SendDocumentReply* reply) try {
         triangel::auth::Principal principal;
-        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
-            return status;
-        }
-
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()) return status;
+        if (request->dokument().klient() < 0 || request->dokument().gruppe().id() <= 0 || request->dokument().name().empty() || request->file().empty())
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Name, Gruppe und eine nicht leere Datei sind erforderlich."};
+        if (request->file().size() > kMaxDocumentBytes) return {grpc::StatusCode::RESOURCE_EXHAUSTED, "Dokument ist zu groß (maximal 20 MiB)."};
         db::raw::Dokument dokument;
-        std::string filePath;
-        dokument.name = request->dokument().name();
-        dokument.gruppe = request->dokument().gruppe().id();
-        for(int i = 0; i < request->dokument().kategorie().size();i++){
-            dokument.kategorie.push_back(request->dokument().kategorie().at(i).id());
+        dokument.name = request->dokument().name(); dokument.gruppe = request->dokument().gruppe().id(); dokument.klient = request->dokument().klient();
+        for (const auto& category : request->dokument().kategorie()) {
+            if (category.id() <= 0) return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Kategorie."};
+            dokument.kategorie.push_back(category.id());
         }
-        dokument.klient = request->dokument().klient();
-
-        if (database_.setNewDokumentFile(principal.user_id, dokument, filePath) == 0){
-            if(!filePath.empty()){
-                std::cerr << "filePath: " << filePath << std::endl;
-                std::ofstream documentFile(filePath, std::ios::binary);
-                documentFile.write(request->file().data(), request->file().size());
-                std::cerr << "rdstate: " << documentFile.rdstate() << std::endl;
-                if(documentFile.rdstate() == std::ios_base::goodbit){
-                    return grpc::Status::OK;
-                }
-                return grpc::Status(grpc::StatusCode::INTERNAL, "Writing file failed");
+        std::string path;
+        const int rc = database_.setNewDokumentFile(principal.user_id, dokument, path);
+        if (rc == 2) { reply->set_error_code("Dokument existiert bereits oder Auswahl ist nicht zulässig."); return grpc::Status::OK; }
+        if (rc != 0 || path.empty()) return {grpc::StatusCode::INTERNAL, "Dokument konnte nicht angelegt werden."};
+        // Database and filesystem are separate systems. Compensate a failed file
+        // write by removing the inserted row and any partial file; log if cleanup fails.
+        std::error_code error;
+        std::filesystem::create_directories(std::filesystem::path(path).parent_path(), error);
+        bool written = false;
+        if (!error) {
+            std::ofstream file(path, std::ios::binary | std::ios::trunc);
+            if (file) {
+                file.write(request->file().data(), static_cast<std::streamsize>(request->file().size()));
+                file.close();
+                written = !file.fail();
             }
-            std::cerr << "Database: " <<  std::endl;
-            return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, "Database Error");
         }
-
-        return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+        if (!written) {
+            std::error_code ignored; std::filesystem::remove(path, ignored);
+            std::string rollbackPath;
+            if (database_.deleteDokumentFile(principal.user_id, dokument, rollbackPath) != 0)
+                std::cerr << "Unable to clean up document metadata after a failed write" << std::endl;
+            return {grpc::StatusCode::INTERNAL, "Datei konnte nicht gespeichert werden."};
+        }
+        return grpc::Status::OK;
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
 
     TaetigkeitService::TaetigkeitService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status TaetigkeitService::Taetigkeit(grpc::ServerContext* context, const triangel::TaetigkeitRequest* request, triangel::TaetigkeitReply* reply) {
+    grpc::Status TaetigkeitService::Taetigkeit(grpc::ServerContext* context, const triangel::TaetigkeitRequest* request, triangel::TaetigkeitReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
         std::vector<db::raw::Taetigkeit> taetigkeiten;
-        database_.getTaetigkeiten(principal.user_id, taetigkeiten);
+        if (auto status = readStatus(database_.getTaetigkeiten(principal.user_id, taetigkeiten)); !status.ok()) return status;
 
         for(int i = 0;i < taetigkeiten.size();i++){
             triangel::Taetigkeit* taetigkeit = reply->add_taetigkeiten();
@@ -219,21 +308,26 @@ namespace services {
         }
 
         return grpc::Status::OK;
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
     
     ZeiteintraegeService::ZeiteintraegeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status ZeiteintraegeService::Zeiteintraege(grpc::ServerContext* context, const triangel::ZeiteintraegeRequest* request, triangel::ZeiteintraegeReply* reply) {
+    grpc::Status ZeiteintraegeService::Zeiteintraege(grpc::ServerContext* context, const triangel::ZeiteintraegeRequest* request, triangel::ZeiteintraegeReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
 
         std::vector<db::raw::Zeiterfassung> zeiteintraegeVector;
-        database_.getZeiteintraege(principal.user_id
-            , std::to_string(request->zeiteintragdatum().year()) + "-" + std::to_string(request->zeiteintragdatum().month()) + "-" + std::to_string(request->zeiteintragdatum().day()) + "-00-00"
-            , std::to_string(request->zeiteintragdatum().year()) + "-" + std::to_string(request->zeiteintragdatum().month()) + "-" + std::to_string(request->zeiteintragdatum().day()) + "-23-59"
-            , zeiteintraegeVector);
+        if (!validDate(request->zeiteintragdatum())) return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültiges Datum."};
+        const std::string day = dateText(request->zeiteintragdatum());
+        if (auto status = readStatus(database_.getZeiteintraege(principal.user_id, day + "-00-00", day + "-23-59", zeiteintraegeVector)); !status.ok()) return status;
 
         for(int i = 0;i < zeiteintraegeVector.size();i++){
             
@@ -256,78 +350,76 @@ namespace services {
         }
 
         return grpc::Status::OK;
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
     
     ZeiteintragService::ZeiteintragService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status ZeiteintragService::Zeiteintrag(grpc::ServerContext* context, const triangel::ZeiteintragRequest* request, triangel::ZeiteintragReply* reply) {
+    grpc::Status ZeiteintragService::Zeiteintrag(grpc::ServerContext* context, const triangel::ZeiteintragRequest* request, triangel::ZeiteintragReply* reply) try {
         triangel::auth::Principal principal;
-        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
-            return status;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()) return status;
+        const auto& entry = request->zeiteintrag();
+        if (request->operation() < 1 || request->operation() > 3 || entry.klientid() <= 0 || (request->operation() != 1 && entry.eintragid() <= 0))
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültiger Eintrag oder Vorgang."};
+        db::raw::Zeiterfassung raw;
+        raw.id = entry.eintragid(); raw.klient = entry.klientid(); raw.taetigkeit = entry.taetigkeitid(); raw.beschreibung = entry.beschreibung();
+        if (request->operation() != 3) {
+            if (!validDate(entry.dayofentry()) || !validTime(entry.anfang()) || !validTime(entry.ende()) || entry.taetigkeitid() <= 0 || entry.beschreibung().size() > 255)
+                return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültiges Datum, Uhrzeit oder Tätigkeit."};
+            raw.von = dateTimeText(entry.dayofentry(), entry.anfang()); raw.bis = dateTimeText(entry.dayofentry(), entry.ende());
         }
-        
-        db::raw::Zeiterfassung zeiteintrag;
-        zeiteintrag.von = std::to_string(request->zeiteintrag().dayofentry().year()) + "-" + std::to_string(request->zeiteintrag().dayofentry().month()) + "-" + std::to_string(request->zeiteintrag().dayofentry().day()) + "-" + std::to_string(request->zeiteintrag().anfang().hour()) + "-" + std::to_string(request->zeiteintrag().anfang().minute());
-        zeiteintrag.bis = std::to_string(request->zeiteintrag().dayofentry().year()) + "-" + std::to_string(request->zeiteintrag().dayofentry().month()) + "-" + std::to_string(request->zeiteintrag().dayofentry().day()) + "-" + std::to_string(request->zeiteintrag().ende().hour()) + "-" + std::to_string(request->zeiteintrag().ende().minute());
-        zeiteintrag.taetigkeit = request->zeiteintrag().taetigkeitid();
-        zeiteintrag.klient = request->zeiteintrag().klientid();
-        zeiteintrag.beschreibung = request->zeiteintrag().beschreibung();
-        zeiteintrag.id = request->zeiteintrag().eintragid();
-        
-        int rc;
-
-        std::string ec;
-
-        switch (request->operation())
-        {
-        case 1:
-            rc = database_.addZeiteintrag(principal.user_id, zeiteintrag, ec);
-            break;
-        case 2:
-            rc = database_.changeZeiteintrag(principal.user_id, zeiteintrag, ec);
-            break;
-        case 3:
-            rc = database_.deleteZeiteintrag(principal.user_id, zeiteintrag);
-            break;
-        
-        default:
-            rc = -1;
-            break;
-        }
-
-        switch (rc)
-        {
-        case 0:
+        std::string message;
+        int rc = request->operation() == 1 ? database_.addZeiteintrag(principal.user_id, raw, message)
+               : request->operation() == 2 ? database_.changeZeiteintrag(principal.user_id, raw, message)
+               : database_.deleteZeiteintrag(principal.user_id, raw);
+        if (rc == 0) return grpc::Status::OK;
+        if (rc == 2 || rc == 3) {
+            reply->set_error_code(message.empty() ? "Eintrag oder Betreuung nicht gefunden." : message);
             return grpc::Status::OK;
-        case 3:
-            reply->set_error_code(ec);
-            return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, "Database Error");
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
         }
-
+        return {grpc::StatusCode::INTERNAL, "Zeiteintrag konnte nicht gespeichert werden."};
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     PasswordChangeService::PasswordChangeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status PasswordChangeService::PasswordChange(grpc::ServerContext* context, const triangel::PasswordChangeRequest* request, triangel::PasswordChangeReply* reply) {
+    grpc::Status PasswordChangeService::PasswordChange(grpc::ServerContext* context, const triangel::PasswordChangeRequest* request, triangel::PasswordChangeReply* reply) try {
         triangel::auth::Principal principal;
-        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
-            return status;
-        }
-
-        database_.changePass(principal.user_id, request->oldpassword(), request->newpassword());
-
-        return grpc::Status::OK;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()) return status;
+        if (request->newpassword().empty()) return {grpc::StatusCode::INVALID_ARGUMENT, "Neues Passwort darf nicht leer sein."};
+        const int rc = database_.changePass(principal.user_id, request->oldpassword(), request->newpassword());
+        if (rc == 0) return grpc::Status::OK;
+        if (rc == -1 || rc == 2) { reply->set_error_code("Altes Passwort ist nicht korrekt."); return grpc::Status::OK; }
+        return {grpc::StatusCode::INTERNAL, "Passwort konnte nicht geändert werden."};
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     CreateUserService::CreateUserService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status CreateUserService::CreateUser(grpc::ServerContext* context, const triangel::CreateUserRequest* request, triangel::CreateUserReply* reply) {
+    grpc::Status CreateUserService::CreateUser(grpc::ServerContext* context, const triangel::CreateUserRequest* request, triangel::CreateUserReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
+
+        // Validate before narrowing an ID to the schema's unsigned type.
+        if (request->newuser().role() <= 0 || request->newuser().role() > 65535)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Rollen-ID."};
 
         db::raw::User newUser;
         newUser.login = request->newuser().loginname();
@@ -337,19 +429,18 @@ namespace services {
         newUser.role = request->newuser().role();
 
         int rc = database_.createUserByService(principal.user_id, newUser);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     GetUsersService::GetUsersService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status GetUsersService::GetUsers(grpc::ServerContext* context, const triangel::GetUsersRequest* request, triangel::GetUsersReply* reply) {
+    grpc::Status GetUsersService::GetUsers(grpc::ServerContext* context, const triangel::GetUsersRequest* request, triangel::GetUsersReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -379,14 +470,20 @@ namespace services {
         case 3:
             return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Unauthorized Access");
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
     
 
     GetRolesService::GetRolesService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status GetRolesService::GetRoles(grpc::ServerContext* context, const triangel::GetRolesRequest* request, triangel::GetRolesReply* reply) {
+    grpc::Status GetRolesService::GetRoles(grpc::ServerContext* context, const triangel::GetRolesRequest* request, triangel::GetRolesReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -412,17 +509,27 @@ namespace services {
         case 3:
             return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Unauthorized Access");
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     ChangeUserService::ChangeUserService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status ChangeUserService::ChangeUser(grpc::ServerContext* context, const triangel::ChangeUserRequest* request, triangel::ChangeUserReply* reply) {
+    grpc::Status ChangeUserService::ChangeUser(grpc::ServerContext* context, const triangel::ChangeUserRequest* request, triangel::ChangeUserReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
+
+        // Validate before narrowing an ID to the schema's unsigned type.
+        if (request->changeduser().id() <= 0 || request->changeduser().role() <= 0 || request->changeduser().role() > 65535)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültiger Nutzer oder Rollen-ID."};
 
         db::raw::User changedUser;
         changedUser.id = request->changeduser().id();
@@ -434,20 +541,19 @@ namespace services {
         changedUser.forceReset = request->forcereset() != 0;
 
         int rc = database_.changeUser(principal.user_id, changedUser);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
 
     GetRechteKategorienService::GetRechteKategorienService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status GetRechteKategorienService::GetRechteKategorien(grpc::ServerContext* context, const triangel::GetRechteKategorienRequest* request, triangel::GetRechteKategorienReply* reply) {
+    grpc::Status GetRechteKategorienService::GetRechteKategorien(grpc::ServerContext* context, const triangel::GetRechteKategorienRequest* request, triangel::GetRechteKategorienReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -470,13 +576,19 @@ namespace services {
             }
             return grpc::Status::OK;
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     GetRechteGruppeService::GetRechteGruppeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status GetRechteGruppeService::GetRechteGruppe(grpc::ServerContext* context, const triangel::GetRechteGruppeRequest* request, triangel::GetRechteGruppeReply* reply) {
+    grpc::Status GetRechteGruppeService::GetRechteGruppe(grpc::ServerContext* context, const triangel::GetRechteGruppeRequest* request, triangel::GetRechteGruppeReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -499,13 +611,19 @@ namespace services {
             }
             return grpc::Status::OK;
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     SetRechteService::SetRechteService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status SetRechteService::SetRechte(grpc::ServerContext* context, const triangel::SetRechteRequest* request, triangel::SetRechteReply* reply) {
+    grpc::Status SetRechteService::SetRechte(grpc::ServerContext* context, const triangel::SetRechteRequest* request, triangel::SetRechteReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -523,42 +641,44 @@ namespace services {
         }
 
         int rc = database_.setRechte(principal.user_id, request->rollenid(), k, g);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     ChangeRolleService::ChangeRolleService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status ChangeRolleService::ChangeRolle(grpc::ServerContext* context, const triangel::ChangeRolleRequest* request, triangel::ChangeRolleReply* reply) {
+    grpc::Status ChangeRolleService::ChangeRolle(grpc::ServerContext* context, const triangel::ChangeRolleRequest* request, triangel::ChangeRolleReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
+
+        // Validate before narrowing an ID to the schema's unsigned type.
+        if (request->rolle().id() <= 0 || request->rolle().id() > 65535)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Rollen-ID."};
 
         db::raw::Rolle rol;
         rol.id = request->rolle().id();
         rol.rolle = request->rolle().bezeichnung();
 
         int rc = database_.changeRolle(principal.user_id, rol);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     ChangeKategorieService::ChangeKategorieService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status ChangeKategorieService::ChangeKategorie(grpc::ServerContext* context, const triangel::ChangeKategorieRequest* request, triangel::ChangeKategorieReply* reply) {
+    grpc::Status ChangeKategorieService::ChangeKategorie(grpc::ServerContext* context, const triangel::ChangeKategorieRequest* request, triangel::ChangeKategorieReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -569,19 +689,18 @@ namespace services {
         kat.name = request->kategorie().bezeichnung();
 
         int rc = database_.changeKategorie(principal.user_id, kat);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     ChangeGruppeService::ChangeGruppeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status ChangeGruppeService::ChangeGruppe(grpc::ServerContext* context, const triangel::ChangeGruppeRequest* request, triangel::ChangeGruppeReply* reply) {
+    grpc::Status ChangeGruppeService::ChangeGruppe(grpc::ServerContext* context, const triangel::ChangeGruppeRequest* request, triangel::ChangeGruppeReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -592,41 +711,43 @@ namespace services {
         grup.name = request->gruppe().bezeichnung();
 
         int rc = database_.changeGruppe(principal.user_id, grup);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     DeleteRolleService::DeleteRolleService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DeleteRolleService::DeleteRolle(grpc::ServerContext* context, const triangel::DeleteRolleRequest* request, triangel::DeleteRolleReply* reply) {
+    grpc::Status DeleteRolleService::DeleteRolle(grpc::ServerContext* context, const triangel::DeleteRolleRequest* request, triangel::DeleteRolleReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
 
+        // Validate before narrowing an ID to the schema's unsigned type.
+        if (request->rolle().id() <= 0 || request->rolle().id() > 65535)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Rollen-ID."};
+
         db::raw::Rolle rol;
         rol.id = request->rolle().id();
 
         int rc = database_.deleteRolle(principal.user_id, rol);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     DeleteKategorieService::DeleteKategorieService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DeleteKategorieService::DeleteKategorie(grpc::ServerContext* context, const triangel::DeleteKategorieRequest* request, triangel::DeleteKategorieReply* reply) {
+    grpc::Status DeleteKategorieService::DeleteKategorie(grpc::ServerContext* context, const triangel::DeleteKategorieRequest* request, triangel::DeleteKategorieReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -636,19 +757,18 @@ namespace services {
         kat.id = request->kategorie().id();
 
         int rc = database_.deleteKategorie(principal.user_id, kat);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     DeleteGruppeService::DeleteGruppeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DeleteGruppeService::DeleteGruppe(grpc::ServerContext* context, const triangel::DeleteGruppeRequest* request, triangel::DeleteGruppeReply* reply) {
+    grpc::Status DeleteGruppeService::DeleteGruppe(grpc::ServerContext* context, const triangel::DeleteGruppeRequest* request, triangel::DeleteGruppeReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -658,19 +778,18 @@ namespace services {
         grup.id = request->gruppe().id();
 
         int rc = database_.deleteGruppe(principal.user_id, grup);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     SetNewRolleService::SetNewRolleService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status SetNewRolleService::SetNewRolle(grpc::ServerContext* context, const triangel::SetNewRolleRequest* request, triangel::SetNewRolleReply* reply) {
+    grpc::Status SetNewRolleService::SetNewRolle(grpc::ServerContext* context, const triangel::SetNewRolleRequest* request, triangel::SetNewRolleReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -680,19 +799,18 @@ namespace services {
         rol.rolle = request->rolle().bezeichnung();
 
         int rc = database_.setNewRolle(principal.user_id, rol);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     SetNewKategorieService::SetNewKategorieService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status SetNewKategorieService::SetNewKategorie(grpc::ServerContext* context, const triangel::SetNewKategorieRequest* request, triangel::SetNewKategorieReply* reply) {
+    grpc::Status SetNewKategorieService::SetNewKategorie(grpc::ServerContext* context, const triangel::SetNewKategorieRequest* request, triangel::SetNewKategorieReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -702,19 +820,18 @@ namespace services {
         kat.name = request->kategorie().bezeichnung();
 
         int rc = database_.setNewKategorie(principal.user_id, kat);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     SetNewGruppeService::SetNewGruppeService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status SetNewGruppeService::SetNewGruppe(grpc::ServerContext* context, const triangel::SetNewGruppeRequest* request, triangel::SetNewGruppeReply* reply) {
+    grpc::Status SetNewGruppeService::SetNewGruppe(grpc::ServerContext* context, const triangel::SetNewGruppeRequest* request, triangel::SetNewGruppeReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -724,43 +841,42 @@ namespace services {
         grup.name = request->gruppe().bezeichnung();
 
         int rc = database_.setNewGruppe(principal.user_id, grup);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     ChangeTaetigkeitService::ChangeTaetigkeitService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status ChangeTaetigkeitService::ChangeTaetigkeit(grpc::ServerContext* context, const triangel::ChangeTaetigkeitRequest* request, triangel::ChangeTaetigkeitReply* reply) {
+    grpc::Status ChangeTaetigkeitService::ChangeTaetigkeit(grpc::ServerContext* context, const triangel::ChangeTaetigkeitRequest* request, triangel::ChangeTaetigkeitReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
 
         db::raw::Taetigkeit taet;
+        taet.id = request->taetigkeit().id();
         taet.name = request->taetigkeit().bezeichnung();
         taet.abrechenbar = request->taetigkeit().abrechenbar();
         taet.buchbar = request->taetigkeit().buchbar();
 
         int rc = database_.changeTaetigkeit(principal.user_id, taet);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     DeleteTaetigkeitService::DeleteTaetigkeitService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DeleteTaetigkeitService::DeleteTaetigkeit(grpc::ServerContext* context, const triangel::DeleteTaetigkeitRequest* request, triangel::DeleteTaetigkeitReply* reply) {
+    grpc::Status DeleteTaetigkeitService::DeleteTaetigkeit(grpc::ServerContext* context, const triangel::DeleteTaetigkeitRequest* request, triangel::DeleteTaetigkeitReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -771,19 +887,18 @@ namespace services {
 
 
         int rc = database_.deleteTaetigkeit(principal.user_id, taet);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     SetNewTaetigkeitService::SetNewTaetigkeitService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status SetNewTaetigkeitService::SetNewTaetigkeit(grpc::ServerContext* context, const triangel::SetNewTaetigkeitRequest* request, triangel::SetNewTaetigkeitReply* reply) {
+    grpc::Status SetNewTaetigkeitService::SetNewTaetigkeit(grpc::ServerContext* context, const triangel::SetNewTaetigkeitRequest* request, triangel::SetNewTaetigkeitReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -796,19 +911,18 @@ namespace services {
 
 
         int rc = database_.setNewTaetigkeit(principal.user_id, taet);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     GetBetreuungenService::GetBetreuungenService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status GetBetreuungenService::GetBetreuungen(grpc::ServerContext* context, const triangel::GetBetreuungenRequest* request, triangel::GetBetreuungenReply* reply) {
+    grpc::Status GetBetreuungenService::GetBetreuungen(grpc::ServerContext* context, const triangel::GetBetreuungenRequest* request, triangel::GetBetreuungenReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -843,13 +957,19 @@ namespace services {
             }
             return grpc::Status::OK;
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     EndBetreuungService::EndBetreuungService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status EndBetreuungService::EndBetreuung(grpc::ServerContext* context, const triangel::EndBetreuungRequest* request, triangel::EndBetreuungReply* reply) {
+    grpc::Status EndBetreuungService::EndBetreuung(grpc::ServerContext* context, const triangel::EndBetreuungRequest* request, triangel::EndBetreuungReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -857,52 +977,58 @@ namespace services {
 
 
         int rc = database_.endBetreuung(principal.user_id, request->betreuungid());
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     SetNewBetreuungService::SetNewBetreuungService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status SetNewBetreuungService::SetNewBetreuung(grpc::ServerContext* context, const triangel::SetNewBetreuungRequest* request, triangel::SetNewBetreuungReply* reply) {
+    grpc::Status SetNewBetreuungService::SetNewBetreuung(grpc::ServerContext* context, const triangel::SetNewBetreuungRequest* request, triangel::SetNewBetreuungReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
 
+        if (request->betreuung().betreuerid() <= 0 || request->betreuung().klientid() <= 0 ||
+            request->betreuung().wochenstunden() < 0 || request->betreuung().stundensatz() < 0 ||
+            !validDate(request->betreuung().gueltigvon()) || !validDate(request->betreuung().gueltigbis()))
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Betreuung."};
         db::raw::Betreuung betreuung;
 
         betreuung.betreuer = request->betreuung().betreuerid();
         betreuung.klient = request->betreuung().klientid();
-        betreuung.gueltigVon = std::to_string(request->betreuung().gueltigvon().year()) + "-" + std::to_string(request->betreuung().gueltigvon().month()) + "-" + std::to_string(request->betreuung().gueltigvon().day());
-        betreuung.gueltigBis = std::to_string(request->betreuung().gueltigbis().year()) + "-" + std::to_string(request->betreuung().gueltigbis().month()) + "-" + std::to_string(request->betreuung().gueltigbis().day());
+        betreuung.gueltigVon = dateText(request->betreuung().gueltigvon());
+        betreuung.gueltigBis = dateText(request->betreuung().gueltigbis());
         betreuung.stundensatz = request->betreuung().stundensatz();
         betreuung.wochenstunden = request->betreuung().wochenstunden();
 
         int rc = database_.setNewBetreuung(principal.user_id, betreuung);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     AuswertungBetreuungService::AuswertungBetreuungService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status AuswertungBetreuungService::AuswertungBetreuung(grpc::ServerContext* context, const triangel::AuswertungBetreuungRequest* request, triangel::AuswertungReply* reply) {
+    grpc::Status AuswertungBetreuungService::AuswertungBetreuung(grpc::ServerContext* context, const triangel::AuswertungBetreuungRequest* request, triangel::AuswertungReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
 
+        // Reports use only year and month; reject impossible selectors up front.
+        if (request->betreuung() <= 0 || request->monat().year() < 1000 || request->monat().year() > 9999 ||
+            request->monat().month() < 1 || request->monat().month() > 12)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Auswertungsauswahl."};
         std::vector<db::resolved::Zeiterfassung> eintraege;
 
         int rc = database_.getAuswertungBetreuung(principal.user_id, request->betreuung(), std::to_string(request->monat().year()) + "-" + std::to_string(request->monat().month()) + "-01", request->abrechenbar(), eintraege);
@@ -934,18 +1060,28 @@ namespace services {
             }
             return grpc::Status::OK;
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     AuswertungBetreuerService::AuswertungBetreuerService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status AuswertungBetreuerService::AuswertungBetreuer(grpc::ServerContext* context, const triangel::AuswertungBetreuerRequest* request, triangel::AuswertungReply* reply) {
+    grpc::Status AuswertungBetreuerService::AuswertungBetreuer(grpc::ServerContext* context, const triangel::AuswertungBetreuerRequest* request, triangel::AuswertungReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
 
+        // Reports use only year and month; reject impossible selectors up front.
+        if (request->betreuer() <= 0 || request->monat().year() < 1000 || request->monat().year() > 9999 ||
+            request->monat().month() < 1 || request->monat().month() > 12)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Auswertungsauswahl."};
         std::vector<db::resolved::Zeiterfassung> eintraege;
 
 
@@ -978,18 +1114,28 @@ namespace services {
             }
             return grpc::Status::OK;
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     AuswertungKlientService::AuswertungKlientService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status AuswertungKlientService::AuswertungKlient(grpc::ServerContext* context, const triangel::AuswertungKlientRequest* request, triangel::AuswertungReply* reply) {
+    grpc::Status AuswertungKlientService::AuswertungKlient(grpc::ServerContext* context, const triangel::AuswertungKlientRequest* request, triangel::AuswertungReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
 
+        // Reports use only year and month; reject impossible selectors up front.
+        if (request->klient() <= 0 || request->monat().year() < 1000 || request->monat().year() > 9999 ||
+            request->monat().month() < 1 || request->monat().month() > 12)
+            return {grpc::StatusCode::INVALID_ARGUMENT, "Ungültige Auswertungsauswahl."};
         std::vector<db::resolved::Zeiterfassung> eintraege;
 
 
@@ -1022,36 +1168,42 @@ namespace services {
             }
             return grpc::Status::OK;
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     ChangeKlientService::ChangeKlientService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status ChangeKlientService::ChangeKlient(grpc::ServerContext* context, const triangel::ChangeKlientRequest* request, triangel::ChangeKlientReply* reply) {
+    grpc::Status ChangeKlientService::ChangeKlient(grpc::ServerContext* context, const triangel::ChangeKlientRequest* request, triangel::ChangeKlientReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
         }
 
         db::raw::Klient klient;
+        klient.id = request->klient().id();
         klient.lastName = request->klient().nname();
         klient.firstName = request->klient().fname();
 
         int rc = database_.changeKlient(principal.user_id, klient);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     DeleteKlientService::DeleteKlientService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status DeleteKlientService::DeleteKlient(grpc::ServerContext* context, const triangel::DeleteKlientRequest* request, triangel::DeleteKlientReply* reply) {
+    grpc::Status DeleteKlientService::DeleteKlient(grpc::ServerContext* context, const triangel::DeleteKlientRequest* request, triangel::DeleteKlientReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -1062,19 +1214,18 @@ namespace services {
 
 
         int rc = database_.deleteKlient(principal.user_id, klient);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 
     SetNewKlientService::SetNewKlientService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status SetNewKlientService::SetNewKlient(grpc::ServerContext* context, const triangel::SetNewKlientRequest* request, triangel::SetNewKlientReply* reply) {
+    grpc::Status SetNewKlientService::SetNewKlient(grpc::ServerContext* context, const triangel::SetNewKlientRequest* request, triangel::SetNewKlientReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -1086,20 +1237,19 @@ namespace services {
 
 
         int rc = database_.setNewKlient(principal.user_id, klient);
-
-        switch (rc)
-        {
-        case 0:
-            return grpc::Status::OK;
-        default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
-        }
+        return mutationStatus(rc, reply);
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
     
 
     GetKlientenService::GetKlientenService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
 
-    grpc::Status GetKlientenService::GetKlienten(grpc::ServerContext* context, const triangel::GetKlientenRequest* request, triangel::GetKlientenReply* reply) {
+    grpc::Status GetKlientenService::GetKlienten(grpc::ServerContext* context, const triangel::GetKlientenRequest* request, triangel::GetKlientenReply* reply) try {
         triangel::auth::Principal principal;
         if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
             return status;
@@ -1126,8 +1276,97 @@ namespace services {
         case 3:
             return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Unauthorized Access");
         default:
-            return grpc::Status(grpc::StatusCode::UNKNOWN, "Internal error");
+            return readStatus(rc);
         }
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    };
+    
+
+    GetSettingsService::GetSettingsService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status GetSettingsService::GetSettings(grpc::ServerContext* context, const triangel::GetSettingsRequest* request, triangel::GetSettingsReply* reply) try {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        for(int i = 0; i < request->names().size(); i++){
+            std::string retVal;
+            int rc = database_.getSettingsValue(request->names().at(i), retVal);
+            switch (rc)
+                {
+                case 0:
+                    {
+                        triangel::Setting* eintrag = reply->add_settingslist();
+
+                        eintrag->set_name(request->names().at(i));
+                        eintrag->set_wert(retVal);
+                    }
+                    break;
+                case 3:
+                    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Unauthorized Access");
+                default:
+                    return readStatus(rc);
+                }
+        }
+
+        return grpc::Status::OK;
+
+
+
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    };
+    
+
+    SetSettingsService::SetSettingsService(DatabaseOperator& database, const triangel::auth::JwtManager& jwt) : database_(database), jwt_(jwt) {};
+
+    grpc::Status SetSettingsService::SetSettings(grpc::ServerContext* context, const triangel::SetSettingsRequest* request, triangel::SetSettingsReply* reply) try {
+        triangel::auth::Principal principal;
+        if (auto status = triangel::auth::requireAuthentication(*context, jwt_, principal); !status.ok()){
+            return status;
+        }
+
+        for(int i = 0; i < request->settingslist().size(); i++){
+            int rc = database_.setSettingsValue(principal.user_id, request->settingslist().at(i).name(), request->settingslist().at(i).wert());
+            switch (rc)
+                {
+                case 4:
+                    {
+                        std::string* eintrag = reply->add_error_code();
+                        *eintrag = std::string("Inserted");
+                    }
+                    break;
+                case 5:
+                    {
+                        std::string* eintrag = reply->add_error_code();
+                        *eintrag = std::string("Updated");
+                    }
+                    break;
+                case 3:
+                    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Unauthorized Access");
+                default:
+                    return readStatus(rc);
+                }
+        }
+
+        return grpc::Status::OK;
+
+    } catch (const std::exception& error) {
+        std::cerr << "RPC failed: " << error.what() << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
+    } catch (...) {
+        std::cerr << "RPC failed with an unknown exception" << std::endl;
+        return {grpc::StatusCode::INTERNAL, "Interner Serverfehler."};
     };
 	
 }

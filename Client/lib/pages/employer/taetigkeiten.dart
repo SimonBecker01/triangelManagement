@@ -1,288 +1,162 @@
-import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
-import 'package:grpc/grpc.dart';
-import 'package:management_triangel/src/generated/triangel.pb.dart';
-import 'package:management_triangel/global.dart';
 import 'package:fixnum/fixnum.dart' as fn;
+import 'package:flutter/material.dart';
+import 'package:management_triangel/global.dart';
+import 'package:management_triangel/src/generated/triangel.pb.dart';
+import 'package:management_triangel/widgets/admin_ui.dart';
 
 class TaetigkeitenScreen extends StatefulWidget {
   const TaetigkeitenScreen({super.key});
-
   @override
   State<TaetigkeitenScreen> createState() => _TaetigkeitenState();
 }
 
-class _TaetigkeitenState extends State<TaetigkeitenScreen>{
-  
-  List<(int, String, bool, bool)> taetigkeiten = <(int, String, bool, bool)>[];
+class _TaetigkeitenState extends State<TaetigkeitenScreen> {
+  final _name = TextEditingController();
+  List<Taetigkeit> _activities = [];
+  int? _selected;
+  bool _billable = false, _bookable = false, _busy = false;
+  String _status = '';
   @override
   void initState() {
     super.initState();
-
-    getActivitiesFromServer();
-
-
+    _load();
   }
 
-  
   @override
   void dispose() {
-    _activityController.dispose();
-    _responseController.dispose();
+    _name.dispose();
     super.dispose();
   }
 
-  DropdownMenu<int> dropDownActivities = DropdownMenu<int>(dropdownMenuEntries: const [],);
+  void _apply(Taetigkeit? activity) {
+    _selected = activity?.id.toInt();
+    _name.text = activity?.bezeichnung ?? '';
+    _billable = activity?.abrechenbar ?? false;
+    _bookable = activity?.buchbar ?? false;
+  }
 
-  final _activityController = TextEditingController();
-  final _responseController = TextEditingController();
-
-
-  int activityIndex = 0;
-  bool _abrechenbar = true;
-  bool _buchbar = true;
-  
-
-  void getActivitiesFromServer() async {
-    TaetigkeitReply taetigkeitRep = await globalGrpcClient.getTaetigkeiten();
-    taetigkeiten.clear();
-    for(int i = 0; i < taetigkeitRep.taetigkeiten.length; i++){
-      taetigkeiten.add((taetigkeitRep.taetigkeiten[i].id.toInt(), taetigkeitRep.taetigkeiten[i].bezeichnung, taetigkeitRep.taetigkeiten[i].abrechenbar, taetigkeitRep.taetigkeiten[i].buchbar));
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() => _busy = true);
+    try {
+      final reply = await globalGrpcClient.getTaetigkeiten();
+      if (!mounted) return;
+      final activities = reply.taetigkeiten.toList();
+      final found = activities.where((a) => a.id.toInt() == _selected).toList();
+      setState(() {
+        _activities = activities;
+        _apply(found.isNotEmpty ? found.first : (activities.isEmpty ? null : activities.first));
+      });
+    } catch (error) {
+      if (mounted) setState(() => _status = requestErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    dropDownActivities = _buildActivitiesDropdown();
-    setState(() {
-      activityIndex = 0;
-      _activityController.text = taetigkeiten[activityIndex].$2;
-    });
   }
 
-  DropdownMenu<int> _buildActivitiesDropdown() {
-    return DropdownMenu<int>(
-      expandedInsets: EdgeInsets.zero,
-      dropdownMenuEntries: UnmodifiableListView<DropdownMenuEntry<int>>(
-          taetigkeiten.map<DropdownMenuEntry<int>>(
-              ((int, String, bool, bool) singleRole) => DropdownMenuEntry<int>(
-                  value: singleRole.$1, label: singleRole.$2))),
-      enabled: true,
-      initialSelection: (taetigkeiten.isNotEmpty) ? taetigkeiten.first.$1 : null,
-      onSelected: (value) {
-        activityIndex = taetigkeiten.indexWhere((item) => item.$1 == value);
-        setState((){
-          _activityController.text = taetigkeiten[activityIndex].$2;
-          _abrechenbar = taetigkeiten[activityIndex].$3;
-          _buchbar = taetigkeiten[activityIndex].$4;
-        });
-      },
-    );
+  Future<void> _mutate(String operation) async {
+    if (operation != 'delete' && _name.text.trim().isEmpty) {
+      setState(() => _status = 'Bitte eine Bezeichnung eingeben.');
+      return;
+    }
+    if (operation != 'create' && _selected == null) return;
+    if (operation == 'delete' && !await confirmRemoval(context, 'Tätigkeit')) return;
+    if (!mounted) return;
+    setState(() {
+      _busy = true;
+      _status = '';
+    });
+    try {
+      // Both screen sizes send all flags; the old narrow path silently reset them.
+      final item = Taetigkeit(
+        id: fn.Int64(_selected ?? 0),
+        bezeichnung: _name.text.trim(),
+        abrechenbar: _billable,
+        buchbar: _bookable,
+      );
+      final error = operation == 'create'
+          ? (await globalGrpcClient.setNewTaetigkeit(item)).errorCode
+          : operation == 'change'
+          ? (await globalGrpcClient.changeTaetigkeit(item)).errorCode
+          : (await globalGrpcClient.deleteTaetigkeit(fn.Int64(_selected!))).errorCode;
+      if (!mounted) return;
+      if (error.isNotEmpty) {
+        setState(() => _status = error);
+        return;
+      }
+      setState(() => _status = 'Tätigkeit wurde gespeichert.');
+      await _load();
+    } catch (error) {
+      if (mounted) setState(() => _status = requestErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
-  
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: standardAppBar(actions: [logoutAction(context)]),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          if (useWideLayout(constraints)) {
-            return _buildWideLayout(context);
-          }
-          return _buildNarrowLayout(context);
-        },
+  Widget build(BuildContext context) => AdminPageLayout(
+    title: 'Tätigkeiten',
+    children: [
+      if (_busy) const LinearProgressIndicator(),
+      if (_activities.isEmpty && !_busy)
+        const Padding(
+          padding: EdgeInsets.only(bottom: 12),
+          child: Text('Noch keine Tätigkeiten vorhanden.'),
+        ),
+      AdminGrid(
+        children: [
+          DropdownButtonFormField<int>(
+            initialValue: _selected,
+            isExpanded: true,
+            decoration: adminDecoration('Bestehende Tätigkeit'),
+            items: [
+              for (final a in _activities)
+                DropdownMenuItem(
+                  value: a.id.toInt(),
+                  child: Text(a.bezeichnung, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: _busy
+                ? null
+                : (id) {
+                    final found = _activities.where((a) => a.id.toInt() == id);
+                    if (found.isNotEmpty) setState(() => _apply(found.first));
+                  },
+          ),
+          TextField(controller: _name, maxLength: 255, decoration: adminDecoration('Bezeichnung')),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Abrechenbar'),
+            value: _billable,
+            onChanged: _busy ? null : (value) => setState(() => _billable = value ?? false),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Buchbar'),
+            value: _bookable,
+            onChanged: _busy ? null : (value) => setState(() => _bookable = value ?? false),
+          ),
+        ],
       ),
-    );
-  }
-
-  
-  Widget _buildWideLayout(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        crossAxisAlignment: CrossAxisAlignment.center,
+      const SizedBox(height: 20),
+      AdminActions(
         children: [
-          const Spacer(flex: 2),
-          Expanded(
-            flex: 3,
-            child: dropDownActivities,
+          FilledButton(
+            onPressed: _busy ? null : () => _mutate('create'),
+            child: const Text('Neu anlegen'),
           ),
-          const Spacer(flex: 2),
-          Row(
-            children: [
-              const Spacer(flex: 2),
-              Expanded(
-                flex: 3,
-                child: TextField(
-                  controller: _activityController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Taetigkeit',
-                  ),
-                ),
-              ),
-              const Spacer(flex: 2),
-              Text("Abrechenbar:"),
-              Checkbox(value: _abrechenbar, onChanged: (bool? value) {setState(() { _abrechenbar = value!;});}),
-              const Spacer(flex: 2),
-              Text("Buchbar:"),
-              Checkbox(value: _buchbar, onChanged: (bool? value) {setState(() { _buchbar = value!;});}),
-              const Spacer(flex: 2),
-            ],
+          OutlinedButton(
+            onPressed: _busy || _selected == null ? null : () => _mutate('change'),
+            child: const Text('Ändern'),
           ),
-          const Spacer(flex: 2),
-          Row(
-            children: [
-              const Spacer(flex: 2),
-              Expanded(
-                flex: 3,
-                child: FilledButton(
-                  onPressed: () async {
-                    ChangeTaetigkeitReply resp = await globalGrpcClient.changeTaetigkeit(Taetigkeit(id: fn.Int64(taetigkeiten[activityIndex].$1), bezeichnung: _activityController.text, abrechenbar: _abrechenbar, buchbar: _buchbar));
-                    if(resp.errorCode.isEmpty){
-                      _responseController.text = "${_activityController.text} wurde erfolgreich geändert";
-                    }else{
-                      _responseController.text = "${_activityController.text} konnte nicht geändert werden";
-                    }
-                    getActivitiesFromServer();
-                  },
-                  child: const Text('Ändern'),
-                ),
-              ),
-              const Spacer(flex: 2),
-              Expanded(
-                flex: 3,
-                child: FilledButton(
-                  onPressed: () async {
-                    SetNewTaetigkeitReply resp = await globalGrpcClient.setNewTaetigkeit(Taetigkeit(id: fn.Int64(taetigkeiten[activityIndex].$1), bezeichnung: _activityController.text, abrechenbar: _abrechenbar, buchbar: _buchbar));
-                    if(resp.errorCode.isEmpty){
-                      _responseController.text = "${_activityController.text} wurde erfolgreich angelegt";
-                    }else{
-                      _responseController.text = "${_activityController.text} konnte nicht angelegt werden";
-                    }
-                    getActivitiesFromServer();
-                  },
-                  child: const Text('Neu anlegen'),
-                ),
-              ),
-              const Spacer(flex: 2),
-              Expanded(
-                flex: 3,
-                child: FilledButton(
-                  onPressed: () async {
-                    DeleteTaetigkeitReply resp = await globalGrpcClient.deleteTaetigkeit(fn.Int64(taetigkeiten[activityIndex].$1));
-                    if(resp.errorCode.isEmpty){
-                      _responseController.text = "${_activityController.text} wurde erfolgreich gelöscht";
-                    }else{
-                      _responseController.text = "${_activityController.text} konnte nicht gelöscht werden";
-                    }
-                    getActivitiesFromServer();
-                  },
-                  child: const Text('Löschen'),
-                ),
-              ),
-              const Spacer(flex: 2),
-            ],
+          OutlinedButton(
+            onPressed: _busy || _selected == null ? null : () => _mutate('delete'),
+            child: const Text('Löschen'),
           ),
-          const Spacer(flex: 2),
-          Expanded(
-            flex: 2,
-            child: Center(child: TextField(controller: _responseController, enabled: false,)),
-          ),
-        ]
-      )
-    );
-  }
-
-  
-  // Blöde kleine Bildschirme...
-  Widget _buildNarrowLayout(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Spacer(flex: 2),
-          Expanded(
-            flex: 3,
-            child: dropDownActivities,
-          ),
-          const Spacer(flex: 2),
-          Expanded(
-            flex: 3,
-            child: TextField(
-              controller: _activityController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Taetigkeit',
-              ),
-            ),
-          ),
-          const Spacer(flex: 2),
-          Row(
-            children: [
-              const Spacer(flex: 2),
-              Text("Abrechenbar:"),
-              Checkbox(value: _abrechenbar, onChanged: (bool? value) {setState(() { _abrechenbar = value!;});}),
-              const Spacer(flex: 2),
-              Text("Buchbar:"),
-              Checkbox(value: _buchbar, onChanged: (bool? value) {setState(() { _buchbar = value!;});}),
-              const Spacer(flex: 2),
-            ],
-          ),
-          const Spacer(flex: 2),
-          Expanded(
-            flex: 3,
-            child: FilledButton(
-              onPressed: () async {
-                ChangeTaetigkeitReply resp = await globalGrpcClient.changeTaetigkeit(Taetigkeit(id: fn.Int64(taetigkeiten[activityIndex].$1), bezeichnung: _activityController.text));
-                if(resp.errorCode.isEmpty){
-                  _responseController.text = "${_activityController.text} wurde erfolgreich geändert";
-                }else{
-                  _responseController.text = "${_activityController.text} konnte nicht geändert werden";
-                }
-                getActivitiesFromServer();
-              },
-              child: const Text('Ändern'),
-            ),
-          ),
-          const Spacer(flex: 2),
-          Expanded(
-            flex: 3,
-            child: FilledButton(
-              onPressed: () async {
-                SetNewTaetigkeitReply resp = await globalGrpcClient.setNewTaetigkeit(Taetigkeit(id: fn.Int64(taetigkeiten[activityIndex].$1), bezeichnung: _activityController.text));
-                if(resp.errorCode.isEmpty){
-                  _responseController.text = "${_activityController.text} wurde erfolgreich angelegt";
-                }else{
-                  _responseController.text = "${_activityController.text} konnte nicht angelegt werden";
-                }
-                getActivitiesFromServer();
-              },
-              child: const Text('Neu anlegen'),
-            ),
-          ),
-          const Spacer(flex: 2),
-          Expanded(
-            flex: 3,
-            child: FilledButton(
-              onPressed: () async {
-                DeleteTaetigkeitReply resp = await globalGrpcClient.deleteTaetigkeit(fn.Int64(taetigkeiten[activityIndex].$1));
-                if(resp.errorCode.isEmpty){
-                  _responseController.text = "${_activityController.text} wurde erfolgreich gelöscht";
-                }else{
-                  _responseController.text = "${_activityController.text} konnte nicht gelöscht werden";
-                }
-                getActivitiesFromServer();
-              },
-              child: const Text('Löschen'),
-            ),
-          ),
-          const Spacer(flex: 2),
-          Expanded(
-            flex: 2,
-            child: Center(child: TextField(controller: _responseController, enabled: false,)),
-          ),
-        ]
-      )
-    );
-  }
-
+        ],
+      ),
+      if (_status.isNotEmpty)
+        Padding(padding: const EdgeInsets.only(top: 12), child: Text(_status)),
+    ],
+  );
 }

@@ -4,17 +4,13 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text_platform_interface/speech_to_text_platform_interface.dart';
 
-
 class OnDeviceSpeechService {
-
-  OnDeviceSpeechService([SpeechToText? speech])
-      : _speech = speech ?? SpeechToText();
+  OnDeviceSpeechService([SpeechToText? speech]) : _speech = speech ?? SpeechToText();
 
   static final OnDeviceSpeechService instance = OnDeviceSpeechService();
 
   final SpeechToText _speech;
   bool _initialized = false;
-
 
   static bool get isPlatformSupported => !kIsWeb && Platform.isAndroid;
 
@@ -28,7 +24,6 @@ class OnDeviceSpeechService {
     }
     return SpeechToTextPlatform.instance.hasOnDeviceSupport(localeId: localeId);
   }
-
 
   Future<bool> startListening({
     required SpeechResultListener onResult,
@@ -51,10 +46,7 @@ class OnDeviceSpeechService {
     _speech.statusListener = onStatus;
 
     if (!_initialized) {
-      _initialized = await _speech.initialize(
-        onError: onError,
-        onStatus: onStatus,
-      );
+      _initialized = await _speech.initialize(onError: onError, onStatus: onStatus);
       if (!_initialized) {
         return false;
       }
